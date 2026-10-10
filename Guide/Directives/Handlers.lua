@@ -1229,6 +1229,10 @@ function addon.functions.accept(self, ...)
             else
                 element.title = ""
                 element.requestFromServer = true
+                if autoAccept and addon.questCache and
+                    addon.questCache.RequestLocalizedTitle then
+                    addon.questCache:RequestLocalizedTitle(id)
+                end
             end
         end
 
