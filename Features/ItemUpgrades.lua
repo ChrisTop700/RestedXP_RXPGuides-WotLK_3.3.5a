@@ -1258,6 +1258,8 @@ function addon.itemUpgrades:LoadStatWeights()
                 specKeys = {"Beast Mastery", "Marksmanship", "Survival"}
             elseif addon.game == "WOTLK" and not data.Spec and data.Class == "Rogue" then
                 specKeys = {"Assassination", "Combat", "Subtlety"}
+            elseif addon.game == "WOTLK" and not data.Spec and data.Class == "Warrior" then
+                specKeys = {"Arms", "Fury", "Protection"}
             end
 
             for _, resolvedSpec in ipairs(specKeys) do
@@ -1352,6 +1354,8 @@ end
 
 -- Always run after LoadStatWeights
 function addon.itemUpgrades:ActivateSpecWeights()
+    -- A failed selection must not reuse another class/spec's previous weights.
+    session.activeStatWeights = {}
     if not session.specWeights then return end
 
     local spec, source = getSpec()
@@ -2372,6 +2376,9 @@ local function CalculateSpellWeight(stats, tooltipTextLines)
 end
 
 function addon.itemUpgrades:GetItemData(itemLink, tooltip, clientUsable)
+    -- No selected weights is an unknown comparison, not a zero-value item.
+    -- Inventory wearability remains available independently of EP scoring.
+    if not session.activeStatWeights or not next(session.activeStatWeights) then return end
     if not itemLink or type(itemLink) ~= "string" then
         -- print("addon.itemUpgrades:GetItemData, itemLink string required", itemLink)
         return

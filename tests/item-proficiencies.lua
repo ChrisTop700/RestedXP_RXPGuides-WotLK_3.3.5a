@@ -137,6 +137,9 @@ return function(root)
     status="equal"; assert(junk("Cloth")==true, "Existing grey/white equal policy changed")
     env.RXPCData.manualJunkOverrides["Cloth:instance"]=false
     assert(junk("Cloth")==false, "Manual keep override lost")
+    session.activeStatWeights={}
+    assert(addon.itemUpgrades:GetItemData("Cloth",{})==nil,
+        "Missing weights returned cached or zero-EP equipment")
     -- Exercise the production debounce callback: stale events cannot rebuild
     -- repeatedly, and skill-header events during scanning cannot recurse.
     local callbacks, refreshes = {}, 0
