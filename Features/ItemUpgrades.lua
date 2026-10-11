@@ -64,6 +64,7 @@ local session = {
     trainedWeapons = {},
     trainedWeaponSources = {},
     trainedArmor = {},
+    trainedArmorSources = {},
     trainedShield = nil,
     wearabilityLevel = nil,
     wearabilityClass = nil,
@@ -131,12 +132,15 @@ local ITEM_WEIGHT_ADDITIONS = {
 -- omit hidden passives from one of them). Use both when deciding whether a
 -- class-specific slot is currently available.
 local function KnowsLegacySpell(spellID)
-    if type(_G.IsPlayerSpell) == "function" and
-        _G.IsPlayerSpell(spellID) then
-        return true
+    if type(_G.IsPlayerSpell) == "function" then
+        local known = _G.IsPlayerSpell(spellID)
+        if known == true or known == 1 then return true end
     end
-    return type(_G.IsSpellKnown) == "function" and
-               _G.IsSpellKnown(spellID) and true or false
+    if type(_G.IsSpellKnown) == "function" then
+        local known = _G.IsSpellKnown(spellID)
+        return known == true or known == 1
+    end
+    return false
 end
 
 local function GetLegacyOffhandWeaponSlot()
@@ -1035,6 +1039,17 @@ function addon.itemUpgrades:UpdateSlotMap()
 end
 
 function addon.itemUpgrades:Setup()
+    -- Inventory eligibility must stay current even when upgrade popups are off.
+    if not session.proficiencyEventsRegistered then
+        for _, event in ipairs({"SKILL_LINES_CHANGED", "SPELLS_CHANGED",
+            "LEARNED_SPELL_IN_TAB", "TRAINER_CLOSED"}) do
+            self:RegisterEvent(event, "WEAPON_PROFICIENCY_CHANGED")
+        end
+        session.proficiencyEventsRegistered = true
+    end
+    self:UpdateSlotMap()
+    RefreshWeaponProficiencies()
+    self:WEAPON_PROFICIENCY_CHANGED()
     -- Toggle functionality off
     if not addon.settings.profile.enableItemUpgrades or not addon.settings.profile.enableTips then
         if session.upgradePopupOpen then
@@ -1047,8 +1062,6 @@ function addon.itemUpgrades:Setup()
         return
     end
 
-    self:UpdateSlotMap()
-    RefreshWeaponProficiencies()
     if not next(session.equippedHandLinks) then SnapshotHandEquipment() end
     if not self:LoadStatWeights() then return end
     if not self:ActivateSpecWeights() then return end
@@ -1066,12 +1079,6 @@ function addon.itemUpgrades:Setup()
     self:RegisterEvent("PLAYER_LEVEL_UP")
     self:RegisterEvent("PLAYER_TALENT_UPDATE")
     self:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
-    self:RegisterEvent("SKILL_LINES_CHANGED", "WEAPON_PROFICIENCY_CHANGED")
-    self:RegisterEvent("SPELLS_CHANGED", "WEAPON_PROFICIENCY_CHANGED")
-    self:RegisterEvent("LEARNED_SPELL_IN_TAB", "WEAPON_PROFICIENCY_CHANGED")
-    -- SKILL_LINES_CHANGED is authoritative on the stock client, but a few
-    -- private cores only finish updating weapon skills when the trainer closes.
-    self:RegisterEvent("TRAINER_CLOSED", "WEAPON_PROFICIENCY_CHANGED")
     -- BAG_UPDATE_DELAYED was added after the original 3.3.5 client. Some
     -- private cores expose it, others do not, and item data can arrive after
     -- the one bag event raised by looting. Always listen to the stock legacy
@@ -1185,6 +1192,7 @@ function addon.itemUpgrades:ACTIVE_TALENT_GROUP_CHANGED()
 end
 
 function addon.itemUpgrades:WEAPON_PROFICIENCY_CHANGED()
+    if session.scanningProficiencies then return end
     session.proficiencyRefreshSerial = session.proficiencyRefreshSerial + 1
     local serial = session.proficiencyRefreshSerial
 
@@ -1210,10 +1218,8 @@ function addon.itemUpgrades:WEAPON_PROFICIENCY_CHANGED()
         end
     end
 
-    -- Update immediately for the stock 3.3.5 event order, then once more after
-    -- the trainer/spellbook has settled. The serial makes the delayed refresh
-    -- idempotent when several skill and spell events fire for one purchase.
-    ApplyProficiencyChange(false)
+    -- Coalesce skill/spell bursts; header expansion during our scan is not a
+    -- new training event. Every equip click still revalidates independently.
     C_Timer.After(0.25, function() ApplyProficiencyChange(true) end)
 end
 
@@ -1786,6 +1792,8 @@ local WEAPON_PROFICIENCY_SPELL = {
 -- so that flag must not override the character's actual proficiency.
 local SHIELD_PROFICIENCY_SPELL = 9116
 local ARMOR_PROFICIENCY_SPELL = {
+    [ItemArmorSubclass.Cloth] = 9078,
+    [ItemArmorSubclass.Leather] = 9077,
     [ItemArmorSubclass.Mail] = 8737,
     [ItemArmorSubclass.Plate] = 750
 }
@@ -1803,7 +1811,7 @@ local function GetClientArmorWearability(itemLink, explicitUsable)
     if not itemName then return nil end
     minimumLevel = tonumber(minimumLevel) or 0
     if minimumLevel > (tonumber(UnitLevel("player")) or 0) then return false end
-    if explicitUsable == true or explicitUsable == 1 then return true end
+    -- Quest reward UI flags are not proficiency evidence.
     if type(NativeIsUsableItem) ~= "function" then return nil end
 
     local ok, usable = pcall(NativeIsUsableItem, itemLink)
@@ -1817,11 +1825,13 @@ local function IsKnownProficiencySpell(spellID)
     local checked
     if type(_G.IsPlayerSpell) == "function" then
         checked = true
-        if _G.IsPlayerSpell(spellID) then return true end
+        local known = _G.IsPlayerSpell(spellID)
+        if known == true or known == 1 then return true end
     end
     if type(_G.IsSpellKnown) == "function" then
         checked = true
-        if _G.IsSpellKnown(spellID) then return true end
+        local known = _G.IsSpellKnown(spellID)
+        if known == true or known == 1 then return true end
     end
 
     -- AzerothCore normally exposes the hidden passive through IsSpellKnown,
@@ -1845,7 +1855,8 @@ local function IsKnownProficiencySpell(spellID)
             end
         end
     end
-    return checked and false or nil
+    if checked then return false end
+    return nil
 end
 
 local subclassMapsBuilt
@@ -1862,6 +1873,8 @@ end
 
 local function AddSubclassName(map, name, id)
     if type(name) ~= "string" or name == "" or type(id) ~= "number" then return end
+    -- Never let a foreign/shifted category list replace a known canonical name.
+    if map[name] ~= nil and map[name] ~= id then return end
     map[name] = id
     map[strlower(name)] = id
     local normalized = NormalizeSubclassName(name)
@@ -1894,9 +1907,10 @@ end
 
 local function ScanLegacyWeaponSkills()
     local learned = {}
+    local armor = {}
     if not _G.GetNumSkillLines or
         not _G.GetSkillLineInfo then
-        return learned, false
+        return learned, false, armor
     end
 
     -- GetNumSkillLines follows the Skills window's expanded/collapsed state.
@@ -1904,6 +1918,9 @@ local function ScanLegacyWeaponSkills()
     -- state, then restore every header (and the selected row) before returning.
     local collapsedHeaders = {}
     local selectedSkill = _G.GetSelectedSkill and _G.GetSelectedSkill()
+    local complete = true
+    session.scanningProficiencies = true
+    local ok = pcall(function()
     if _G.ExpandSkillHeader and _G.CollapseSkillHeader then
         local index = 1
         while index <= (tonumber(_G.GetNumSkillLines()) or 0) do
@@ -1911,25 +1928,28 @@ local function ScanLegacyWeaponSkills()
             if isHeader and not isExpanded then
                 local ok = pcall(_G.ExpandSkillHeader, index)
                 if ok then collapsedHeaders[#collapsedHeaders + 1] = index end
+                if not ok then complete = false end
             end
             index = index + 1
         end
     end
 
-    local hasWeaponSkillData = false
     local numSkills = tonumber(_G.GetNumSkillLines()) or 0
     for index = 1, numSkills do
-        local skillName, isHeader = _G.GetSkillLineInfo(index)
+        local skillName, isHeader, expanded, rank = _G.GetSkillLineInfo(index)
+        if not skillName or (isHeader and not expanded) then complete = false end
         if skillName and not isHeader then
             local subclassID = LookupSubclassName(WEAPON_SUBCLASS_BY_NAME,
                                                    skillName)
             if subclassID and WEAPON_PROFICIENCY_SPELL[subclassID] and
                 subclassID ~= ItemWeaponSubclass.Unarmed then
-                learned[subclassID] = true
-                hasWeaponSkillData = true
+                if tonumber(rank) and tonumber(rank) > 0 then learned[subclassID] = true end
             end
+            local armorID = LookupSubclassName(ARMOR_SUBCLASS_BY_NAME, skillName)
+            if armorID and tonumber(rank) and tonumber(rank) > 0 then armor[armorID] = true end
         end
     end
+    end)
 
     for index = #collapsedHeaders, 1, -1 do
         pcall(_G.CollapseSkillHeader, collapsedHeaders[index])
@@ -1937,7 +1957,10 @@ local function ScanLegacyWeaponSkills()
     if selectedSkill and _G.SetSelectedSkill then
         pcall(_G.SetSelectedSkill, selectedSkill)
     end
-    return learned, hasWeaponSkillData
+    session.scanningProficiencies = nil
+    if not ok then return {}, false, {} end
+    return learned, complete and next(learned) ~= nil, armor,
+        complete and next(armor) ~= nil
 end
 
 local function AddAuctionSubclasses(classIndex, map, validIDs)
@@ -1947,39 +1970,51 @@ local function AddAuctionSubclasses(classIndex, map, validIDs)
     table.remove(values, 1)
     for index, name in ipairs(values) do
         local subclassID = index - 1
+        -- Legacy armor AH order omits obsolete Bucklers (ID 5).
+        if classIndex == 2 then
+            subclassID = ({0, 1, 2, 3, 4, 6})[index]
+        end
+        if subclassID == nil then break end
         if validIDs[subclassID] then AddSubclassName(map, name, subclassID) end
     end
 end
 
 local function BuildLegacySubclassMaps()
     if subclassMapsBuilt then return end
-    subclassMapsBuilt = true
 
-    local weaponIDs, armorIDs = {}, {}
-    for _, id in pairs(ItemWeaponSubclass) do
-        if type(id) == "number" then weaponIDs[id] = true end
-    end
+    local armorIDs = {}
     for _, id in pairs(ItemArmorSubclass) do
         if type(id) == "number" then armorIDs[id] = true end
     end
 
     -- In the legacy AH category list Weapons and Armor are categories 1 and 2.
-    -- Armor subclasses are contiguous; weapon spell names below also cover the
-    -- historical gaps in the weapon-subclass numbering.
-    AddAuctionSubclasses(1, WEAPON_SUBCLASS_BY_NAME, weaponIDs)
+    -- Only the supported armor categories are mapped by their explicit order.
+    -- AH weapon lists omit subclass IDs (for example obsolete weapons).
+    -- Their display positions must not overwrite canonical weapon IDs.
     AddAuctionSubclasses(2, ARMOR_SUBCLASS_BY_NAME, armorIDs)
 
     for subclassID, spellID in pairs(WEAPON_PROFICIENCY_SPELL) do
         local spellName = _G.GetSpellInfo and _G.GetSpellInfo(spellID)
         AddSubclassName(WEAPON_SUBCLASS_BY_NAME, spellName, subclassID)
     end
+    for subclassID, spellID in pairs(ARMOR_PROFICIENCY_SPELL) do
+        AddSubclassName(ARMOR_SUBCLASS_BY_NAME,
+            _G.GetSpellInfo and _G.GetSpellInfo(spellID), subclassID)
+    end
+    AddSubclassName(ARMOR_SUBCLASS_BY_NAME,
+        _G.GetSpellInfo and _G.GetSpellInfo(SHIELD_PROFICIENCY_SPELL),
+        ItemArmorSubclass.Shield)
+    -- Retry incomplete locale data only during capability refreshes, not per item.
+    subclassMapsBuilt = true
 end
 
 RefreshWeaponProficiencies = function()
+    subclassMapsBuilt = nil
     BuildLegacySubclassMaps()
     wipe(session.trainedWeapons)
     wipe(session.trainedWeaponSources)
     wipe(session.trainedArmor)
+    wipe(session.trainedArmorSources)
 
     -- On 3.3.5 the Skills panel is the closest representation of what the
     -- server will actually let this character equip. Some private cores report
@@ -1987,8 +2022,9 @@ RefreshWeaponProficiencies = function()
     -- skill has been trained. Record every visible weapon skill first and, once
     -- at least one is available, treat the absence of another ordinary weapon
     -- skill as an explicit "not trained" result.
-    local legacyWeaponSkills, hasLegacyWeaponSkillData =
+    local legacyWeaponSkills, hasLegacyWeaponSkillData, legacyArmorSkills, hasArmorSkillData =
         ScanLegacyWeaponSkills()
+    session.armorSkillsComplete = hasArmorSkillData
 
     for subclassID, spellID in pairs(WEAPON_PROFICIENCY_SPELL) do
         local knownBySpell = IsKnownProficiencySpell(spellID)
@@ -2011,18 +2047,32 @@ RefreshWeaponProficiencies = function()
     if addon.gameVersion == 30300 then
         for subclassID, spellID in pairs(ARMOR_PROFICIENCY_SPELL) do
             local trained = IsKnownProficiencySpell(spellID)
+            local source = trained ~= nil and "spell" or nil
+            if hasArmorSkillData then
+                trained, source = legacyArmorSkills[subclassID] == true, "skill"
+            end
+            if legacyArmorSkills[subclassID] then trained, source = true, "skill" end
             -- Successfully wearing the armor is definitive evidence even when
             -- a private core does not expose its hidden proficiency passive.
             if trained ~= true and HasEquippedArmorSubclass(subclassID) then
                 trained = true
+                source = "equipped"
             end
             session.trainedArmor[subclassID] = trained
+            session.trainedArmorSources[subclassID] = source
         end
     end
 
     if addon.gameVersion == 30300 then
         session.trainedShield =
             IsKnownProficiencySpell(SHIELD_PROFICIENCY_SPELL)
+        if hasArmorSkillData then
+            session.trainedShield = legacyArmorSkills[ItemArmorSubclass.Shield] == true
+        end
+        if legacyArmorSkills[ItemArmorSubclass.Shield] or
+            HasEquippedArmorSubclass(ItemArmorSubclass.Shield) then
+            session.trainedShield = true
+        end
         if session.trainedShield == true then
             -- Respect custom AzerothCore characters which were explicitly
             -- granted the proficiency, even if their stock class normally
@@ -2082,8 +2132,8 @@ local function IsUsableForClass(itemSubTypeID, itemEquipLoc, itemLink,
 
     if IsWeaponSlot(itemEquipLoc) then
         local proficiencySpell = WEAPON_PROFICIENCY_SPELL[itemSubTypeID]
-        local trained = proficiencySpell and
-                            session.trainedWeapons[itemSubTypeID] or nil
+        local trained
+        if proficiencySpell then trained = session.trainedWeapons[itemSubTypeID] end
         -- On 3.3.5 the learned proficiency is authoritative. This both rejects
         -- trainable-but-unlearned weapons and permits WotLK/custom-core weapon
         -- training which may be absent from the static class fallback map.
@@ -2128,6 +2178,9 @@ local function IsUsableForClass(itemSubTypeID, itemEquipLoc, itemLink,
             return false
         end
     else
+        -- Cloaks and generic accessories do not require body-armor training.
+        if itemEquipLoc == "INVTYPE_CLOAK" and
+            itemSubTypeID == ItemArmorSubclass.Cloth then return true end
         if not session.equippableArmor[itemSubTypeID] then return false end
         local proficiencySpell = ARMOR_PROFICIENCY_SPELL[itemSubTypeID]
         if proficiencySpell then
@@ -2136,7 +2189,10 @@ local function IsUsableForClass(itemSubTypeID, itemEquipLoc, itemLink,
             -- armor item on cores which omit that hidden passive. Nil remains
             -- unknown instead of becoming an implicit level-based success.
             if session.trainedArmor[itemSubTypeID] == true then return true end
-            if GetClientArmorWearability(itemLink, clientUsable) == true then
+            if not session.armorSkillsComplete and
+                (itemSubTypeID == ItemArmorSubclass.Mail or
+                itemSubTypeID == ItemArmorSubclass.Plate) and
+                GetClientArmorWearability(itemLink, clientUsable) == true then
                 return true
             end
             if session.trainedArmor[itemSubTypeID] == false then return false end
@@ -2407,7 +2463,7 @@ function addon.itemUpgrades:GetItemData(itemLink, tooltip, clientUsable)
     -- cache and retry immediately when the character learns a weapon skill.
     local requiresVerifiedProficiency = IsWeaponSlot(itemEquipLoc) or
         itemEquipLoc == "INVTYPE_SHIELD" or
-        ARMOR_PROFICIENCY_SPELL[itemSubTypeID] ~= nil
+        ARMOR_PROFICIENCY_SPELL[itemSubTypeID] ~= nil or addon.gameVersion == 30300
     if requiresVerifiedProficiency and
         classUsability ~= true then
         itemData = {
@@ -2819,8 +2875,7 @@ function addon.itemUpgrades:CompareItemWeight(itemLink, tooltip,
                                              comparedData.itemEquipLoc,
                                              comparedData.itemLink,
                                              comparedData.clientUsable)
-    if addon.gameVersion == 30300 and
-        IsWeaponSlot(comparedData.itemEquipLoc) and classUsability ~= true then
+    if addon.gameVersion == 30300 and classUsability ~= true then
         return nil, "unusable"
     end
     if classUsability == false and
@@ -3170,6 +3225,9 @@ function addon.itemUpgrades:EquipBagUpgrade(data)
     if not data or InCombatLockdown() or UnitIsDeadOrGhost("player") or
         GetCursorInfo() then return false end
     if GetContainerItemLink(data.bag, data.bagSlot) ~= data.itemLink then return false end
+    self:UpdateSlotMap()
+    RefreshWeaponProficiencies()
+    wipe(session.itemCache)
 
     -- Re-evaluate at click time: the player may have changed gear while the
     -- confirmation was open, especially for rings, trinkets, and weapons.
