@@ -80,6 +80,7 @@ local session = {
     promptedUpgrades = {},
     upgradePopupOpen = false,
     pendingUpgradeEquip = nil,
+    equipmentLocks = {}, -- Session-only: exact equipped links, never SavedVariables.
     upgradeQueryRetries = 0,
     detailTooltip = nil,
     detailTooltipSource = nil,
@@ -900,6 +901,14 @@ local function TooltipSetItem(tooltip, ...)
     -- Exclude addon text when looking at an equipped item
     --  Unless enableTotalEP
     if IsEquippedItem(itemLink) then
+        for slot = 1, (_G.INVSLOT_LAST_EQUIPPED or 19) do
+            if GetInventoryItemLink("player", slot) == itemLink and
+                addon.itemUpgrades:IsEquipmentSlotLocked(slot) then
+                tooltip:AddLine(L("Keep this equipped: replacement paused"), 1, 0.82, 0, true)
+                tooltip:Show()
+                break
+            end
+        end
         if addon.settings.profile.enableTotalEP then
             enableTotalEPLines(itemData, lines)
 
@@ -3140,6 +3149,86 @@ local function GetComparisonIncrease(comparison)
     return increase
 end
 
+function addon.itemUpgrades:IsEquipmentSlotLocked(slot)
+    if type(slot) ~= "number" then return false end
+    local locks = session.equipmentLocks
+    local link = locks and locks[slot]
+    if not link then return false end
+    if GetInventoryItemLink("player", slot) ~= link then
+        locks[slot] = nil
+        return false
+    end
+    return true
+end
+
+function addon.itemUpgrades:GetEquipmentLockOptions()
+    local values = {}
+    for slot = 1, (_G.INVSLOT_LAST_EQUIPPED or 19) do
+        local link = GetInventoryItemLink("player", slot)
+        if link then
+            local _, _, _, _, _, _, _, _, loc = GetItemInfo(link)
+            values[slot] = fmt("%s #%d: %s", _G[loc or ""] or L("slot"), slot, link)
+        end
+    end
+    return values
+end
+
+function addon.itemUpgrades:SetEquipmentSlotLocked(slot, locked)
+    if type(slot) ~= "number" or slot < 1 or slot > 19 or slot % 1 ~= 0 then return end
+    session.equipmentLocks = session.equipmentLocks or {}
+    local link = GetInventoryItemLink("player", slot)
+    session.equipmentLocks[slot] = locked and link or nil
+    -- Hiding a stale popup must never be interpreted as an Equip click.
+    session.pendingUpgradeEquip = nil
+    if _G.StaticPopup_Hide then _G.StaticPopup_Hide("RXPItemUpgradeFound") end
+    wipe(session.promptedUpgrades)
+    InvalidateUpgradeDetailTooltip()
+    if addon.inventoryManager and addon.inventoryManager.RefreshJunkIcons then
+        addon.inventoryManager.RefreshJunkIcons(0)
+    end
+    if addon.gearAdvisor and addon.gearAdvisor.Refresh then addon.gearAdvisor:Refresh() end
+    QueueUpgradeScan(0.25)
+end
+
+function addon.itemUpgrades:ClearEquipmentLocks()
+    session.equipmentLocks = {}
+    -- Use the same presentation invalidation without creating a new lock.
+    self:SetEquipmentSlotLocked(1, false)
+end
+
+function addon.itemUpgrades:IsEquipmentReplacementLocked(itemLink, slot)
+    if self:IsEquipmentSlotLocked(slot) then return true end
+    local loc = select(9, GetItemInfo(itemLink))
+    if loc == "INVTYPE_2HWEAPON" and slot == _G.INVSLOT_MAINHAND then
+        return self:IsEquipmentSlotLocked(_G.INVSLOT_OFFHAND)
+    end
+    -- Putting something in the off-hand removes an equipped two-hander.
+    if slot == _G.INVSLOT_OFFHAND and self:IsEquipmentSlotLocked(_G.INVSLOT_MAINHAND) then
+        local main = GetInventoryItemLink("player", _G.INVSLOT_MAINHAND)
+        return main and select(9, GetItemInfo(main)) == "INVTYPE_2HWEAPON"
+    end
+    return false
+end
+
+function addon.itemUpgrades:IsProtectedByEquipmentLock(itemLink)
+    if not session.equipmentLocks or not next(session.equipmentLocks) then return false end
+    local loc = select(9, GetItemInfo(itemLink))
+    -- Unknown items remain protected by the existing inventory policy.
+    if not loc then return false end
+    local slots = session.equippableSlots[loc]
+    if type(slots) == "number" then
+        if self:IsEquipmentReplacementLocked(itemLink, slots) then return true end
+    elseif type(slots) == "table" then
+        for _, slot in pairs(slots) do
+            if self:IsEquipmentReplacementLocked(itemLink, slot) then return true end
+        end
+    end
+    if loc == "INVTYPE_WEAPON" then
+        return self:IsEquipmentReplacementLocked(itemLink, _G.INVSLOT_OFFHAND)
+    end
+    return false
+end
+
 function addon.itemUpgrades:GetBestUpgradeComparison(itemLink)
     local comparisons, reason, state = self:CompareItemWeight(itemLink)
     if state ~= "upgrade" or not comparisons then
@@ -3149,10 +3238,15 @@ function addon.itemUpgrades:GetBestUpgradeComparison(itemLink)
     local best, bestIncrease
     for _, comparison in ipairs(comparisons) do
         local increase = GetComparisonIncrease(comparison)
-        if increase > 0 and (not bestIncrease or increase > bestIncrease) then
+        if increase > 0 and
+            not self:IsEquipmentReplacementLocked(itemLink, comparison.SlotCompared) and
+            (not bestIncrease or increase > bestIncrease) then
             best = comparison
             bestIncrease = increase
         end
+    end
+    if not best and self:IsProtectedByEquipmentLock(itemLink) then
+        return nil, "locked", L("Keep this equipped: replacement paused")
     end
     return best, best and "upgrade" or "unknown", reason
 end
@@ -3523,6 +3617,9 @@ function addon.itemUpgrades:UPGRADE_EQUIPMENT_CHANGED()
     -- private core which omitted the corresponding hidden passive.
     C_Timer.After(0, function()
         RefreshWeaponProficiencies()
+        for slot in pairs(session.equipmentLocks or {}) do
+            self:IsEquipmentSlotLocked(slot)
+        end
         RefreshHandReplacementState()
         wipe(session.promptedUpgrades)
         QueueUpgradeScan(0.25)

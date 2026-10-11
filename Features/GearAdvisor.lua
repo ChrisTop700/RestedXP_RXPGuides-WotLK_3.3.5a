@@ -43,7 +43,7 @@ function advisor:ScanBags()
                     (tonumber(requiredLevel) or 0) <= UnitLevel("player") then
                     local comparison, itemState, reason =
                         addon.itemUpgrades:GetBestUpgradeComparison(link)
-                    if not comparison then
+                    if not comparison and itemState ~= "locked" then
                         local _, compareReason, compareState =
                             addon.itemUpgrades:CompareItemWeight(link, nil, true)
                         itemState = compareState or itemState or "unknown"
@@ -77,7 +77,7 @@ function advisor:ScanRewards()
         if link then
             local comparison, itemState, reason =
                 addon.itemUpgrades:GetBestUpgradeComparison(link)
-            if not comparison then
+            if not comparison and itemState ~= "locked" then
                 local _, compareReason, compareState =
                     addon.itemUpgrades:CompareItemWeight(link, nil, true)
                 itemState = compareState or itemState or "unknown"
@@ -107,6 +107,7 @@ function advisor:BuildRows()
 end
 
 local function StateText(entry)
+    if entry.state == "locked" then return L("Keep this equipped: replacement paused") end
     if entry.state == "upgrade" then
         return format("|cff40ff40" .. L("Upgrade +%.2f EP") .. "|r", entry.increase)
     elseif entry.state == "downgrade" then

@@ -3953,6 +3953,31 @@ function addon.settings:CreateAceOptionsPanel()
                             end
                         end
                     },
+                    equipmentLocks = {
+                        name = L("Keep this equipped"),
+                        desc = L("Checked slots keep their current equipment for this session. Replacement suggestions are paused and replacement gear is protected from automatic junk handling. Uncheck to unlock. Locks clear on reload or when you manually replace the equipped item."),
+                        type = "multiselect",
+                        order = 5.61,
+                        width = "full",
+                        values = function()
+                            return addon.itemUpgrades and addon.itemUpgrades:GetEquipmentLockOptions() or {}
+                        end,
+                        get = function(_, slot)
+                            return addon.itemUpgrades and addon.itemUpgrades:IsEquipmentSlotLocked(slot) or false
+                        end,
+                        set = function(_, slot, value)
+                            if addon.itemUpgrades then addon.itemUpgrades:SetEquipmentSlotLocked(slot, value) end
+                        end,
+                    },
+                    clearEquipmentLocks = {
+                        name = L("Unlock all equipment"),
+                        desc = L("Resume equipment recommendations for all temporarily locked slots."),
+                        type = "execute",
+                        order = 5.62,
+                        func = function()
+                            if addon.itemUpgrades then addon.itemUpgrades:ClearEquipmentLocks() end
+                        end,
+                    },
                     showUpgradeDetailsOnHover = {
                         name = L("Show upgrade details on hover"),
                         desc = L("Shows an expanded EP breakdown while you hold the selected key over an equippable item. Upgrade prompts also provide a hoverable item icon when supported by the client."),

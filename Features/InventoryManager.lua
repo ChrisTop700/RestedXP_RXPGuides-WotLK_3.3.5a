@@ -421,6 +421,10 @@ local function IsJunk(id, bag, slot)
     local equippable = IsEquippableLocation(itemEquipLoc)
     if equippable then
         local upgrades = addon.itemUpgrades
+        -- A quest outfit must not cause the gear kept for later to be sold.
+        -- Explicit manual junk overrides were already honored above.
+        if upgrades and upgrades.IsProtectedByEquipmentLock and itemLink and
+            upgrades:IsProtectedByEquipmentLock(itemLink) then return false end
         -- Explicitly junk body armor, shields, and weapons outside the
         -- character's current proficiency. The shared wearability helper uses
         -- the class map plus the actual 3.3.5 spellbook/skill-line result, and
