@@ -1005,5 +1005,6 @@ assert(loadfile(root .. "/tests/stat-weights.lua"))()(root)
 assert(loadfile(root .. "/tests/equipment-locks.lua"))()(root)
 assert(loadfile(root .. "/tests/attack-timer.lua"))()(root)
 assert(loadfile(root .. "/tests/optional-tool-defaults.lua"))()(root)
+assert(loadfile(root .. "/tests/junk-deletion.lua"))()(root)
 if failures > 0 then os.exit(1) end
 print("Core Lua 5.1 tests passed.")

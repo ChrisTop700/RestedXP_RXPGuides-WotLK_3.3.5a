@@ -500,10 +500,30 @@ end
 
 inventoryManager.ToggleJunk = ToggleJunk
 
+-- Only compare complete, unlocked stacks whose exact item instance is junk.
+-- Unknown vendor prices are not zero-value items.
+local function ReadJunkCandidate(bag, slot)
+    local id = GetContainerItemID(bag, slot)
+    local link = GetContainerItemLink(bag, slot)
+    local texture, count, locked = GetContainerItemInfo(bag, slot)
+    if type(texture) == "table" then
+        count, locked = texture.stackCount, texture.isLocked
+    end
+    if not id or not link or (locked and locked ~= 0) or
+        type(count) ~= "number" or count <= 0 or count == math.huge or
+        count ~= math.floor(count) then return end
+    local name, _, _, _, _, _, _, _, _, _, price = GetItemInfo(link)
+    if not name or type(price) ~= "number" or price < 0 or
+        price ~= price or price == math.huge or not IsJunk(id, bag, slot) then return end
+    return {bag = bag, slot = slot, id = id, link = link,
+        count = count, price = price, value = count * price}
+end
+
 local function FindJunk(deleteItem)
 
     inventoryManager.deleteBag = nil
     inventoryManager.deleteSlot = nil
+    inventoryManager.deleteCandidate = nil
 
     if organizeQuiver then
         SortQuiver()
@@ -512,6 +532,7 @@ local function FindJunk(deleteItem)
 
     for bag = BACKPACK_CONTAINER, NUM_BAG_FRAMES do
         local freeSlots, bagType = GetContainerNumFreeSlots(bag)
+        if not deleteItem and (type(freeSlots) ~= "number" or type(bagType) ~= "number") then return end
         --print(bagType,freeSlots,deleteItem)
         if bagType and bagType == 0 and freeSlots and freeSlots > 0 and not deleteItem then
             return
@@ -528,13 +549,15 @@ local function FindJunk(deleteItem)
     end
 
     local movingAmmo
-    local bestBag, bestSlot
+    local bestBag, bestSlot, bestCandidate
     local bestValue = math.huge
 
     for bag = BACKPACK_CONTAINER, NUM_BAG_FRAMES do
         local _,bagType = GetContainerNumFreeSlots(bag)
         local numSlots
-        if not bagType or bagType > 2 then
+        -- Automatic disposal must free a general-purpose slot, not a quiver
+        -- slot which cannot hold the ordinary loot that filled the backpack.
+        if not bagType or bagType > 2 or (not deleteItem and bagType ~= 0) then
             numSlots = 0
         else
             numSlots = GetContainerNumSlots(bag)
@@ -543,25 +566,19 @@ local function FindJunk(deleteItem)
             local isProjectile
             local id = GetContainerItemID(bag, slot)
             if id then
-                local subclass, stackMax, price = GetProjectileSubclass(id)
+                local subclass = GetProjectileSubclass(id)
                 if bagType == 0 and subclass == projectileType then
                     isProjectile = true
                 end
 
                 if not (isProjectile or movingAmmo) then
-                    local t,count = GetContainerItemInfo(bag,slot)
-                    if type(t) == "table" and not count then
-                        count = t.stackCount
-                    end
-                    if stackMax and count and IsJunk(id,bag,slot) then
-                        --local item_count = select(2, GetContainerItemInfo(bag, slot))
-                        price = price or 0
-                        local value = (stackMax + count) * price/2
-                        if value < bestValue then
+                    local candidate = ReadJunkCandidate(bag, slot)
+                    if candidate then
+                        if candidate.value < bestValue then
                             bestBag = bag
                             bestSlot = slot
-                            bestValue = value
-                            --print(bestBag,bestSlot)
+                            bestValue = candidate.value
+                            bestCandidate = candidate
                         end
                     end
                 elseif isProjectile and quiverFreeSlots > 0 then
@@ -589,23 +606,44 @@ local function FindJunk(deleteItem)
     elseif bestBag and bestSlot then
         inventoryManager.deleteBag = bestBag
         inventoryManager.deleteSlot = bestSlot
+        inventoryManager.deleteCandidate = bestCandidate
     elseif inventoryManager.clickFrame then
         inventoryManager.clickFrame:Hide()
     end
     --print(bestBag,bestSlot)
 end
 
-local function DeleteItems()
+local function DeleteItems(deleteIfFull)
     if inventoryManager.sellGoods and MerchantFrame:IsShown() and MerchantFrame.selectedTab == 1 then
         inventoryManager.ProcessJunk(true)
         return
-    elseif UnitIsDead('player') or GetCursorInfo() then
+    elseif UnitIsDead('player') or InCombatLockdown() or GetCursorInfo() then
         return
     elseif inventoryManager.deleteBag then
-        PickupContainerItem(inventoryManager.deleteBag,inventoryManager.deleteSlot)
+        if not inventoryManager.manualDelete and not inventoryManager.IsBagAutomationEnabled() then return end
+        -- Bag events only nominate a candidate. On the actual hardware input,
+        -- recheck fullness and select the cheapest currently eligible stack.
+        FindJunk(deleteIfFull == false)
+        local candidate = inventoryManager.deleteCandidate
+        if not candidate or UnitIsDead('player') or InCombatLockdown() or GetCursorInfo() then return end
+        local current = ReadJunkCandidate(candidate.bag, candidate.slot)
+        if not current or current.id ~= candidate.id or current.link ~= candidate.link or
+            current.count ~= candidate.count or current.price ~= candidate.price then return end
+        inventoryManager.deleteBag = nil
+        inventoryManager.deleteSlot = nil
+        inventoryManager.deleteCandidate = nil
+        PickupContainerItem(current.bag, current.slot)
+        local kind, cursorId, cursorLink = GetCursorInfo()
+        if kind ~= "item" or cursorId ~= current.id or cursorLink ~= current.link then
+            if kind then ClearCursor() end
+            return
+        end
         DeleteCursorItem()
+        -- A rejected/confirmation-required deletion must not claim success or
+        -- leave an item on the cursor for a later unrelated input callback.
+        if GetCursorInfo() then ClearCursor() return end
         local colour = addon.guideTextColors["RXP_WARN_"]
-        local _,stack,_,_,_,_,link = GetContainerItemInfo(inventoryManager.deleteBag,inventoryManager.deleteSlot)
+        local stack, link = current.count, current.link
         if link then
             if inventoryManager.manualDelete then
                addon.comms.PrettyPrint(L("|c%sDeleting %sx%s|r"),colour,link,stack)
@@ -613,8 +651,6 @@ local function DeleteItems()
                 addon.comms.PrettyPrint(L("|c%sInventory is full, deleting %sx%s|r"),colour,link,stack)
             end
         end
-        inventoryManager.deleteBag = nil
-        inventoryManager.deleteSlot = nil
     elseif organizeQuiver and not InCombatLockdown() then
         SortQuiver()
     end
@@ -627,7 +663,7 @@ local DeleteCheapestItem = function(self,deleteIfFull)
     end
     inventoryManager.manualDelete = true
     FindJunk(not deleteIfFull)
-    DeleteItems(true)
+    DeleteItems(deleteIfFull == true)
     inventoryManager.manualDelete = false
 end
 
