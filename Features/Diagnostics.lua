@@ -26,6 +26,7 @@ local function SafeValue(value)
 end
 
 function diagnostics:Record(kind, data)
+    if not addon.settings.profile.enableStepDoctor then return end
     self.records = self.records or {}
     local record = {time = GetTime(), kind = tostring(kind):sub(1, 60)}
     if type(data) == "table" then
@@ -199,6 +200,7 @@ function diagnostics:BuildReport(stepNumber, includeRecent)
 end
 
 function diagnostics:Open(stepNumber)
+    if not addon.settings.profile.enableStepDoctor then return end
     addon.comms.OpenBrandedExport(L("Step Doctor"),
         L("The report explains the current step. Use /rxp diagnose after retrying the action."),
         self:BuildReport(stepNumber, false), 720, 520)
@@ -290,10 +292,11 @@ function diagnostics:SkipCurrent(markComplete)
 end
 
 function diagnostics:Setup()
+    if not addon.settings.profile.enableStepDoctor then return end
     if self.setup then return end
     self.setup = true
     self.records = self.records or {}
-    self.eventFrame = CreateFrame("Frame")
+    self.eventFrame = self.eventFrame or CreateFrame("Frame")
     for _, event in ipairs(observedEvents) do
         pcall(self.eventFrame.RegisterEvent, self.eventFrame, event)
     end
@@ -317,7 +320,10 @@ function diagnostics:Setup()
     end
     addon:RegisterMessage("RXP_STEP_ACTIVATED", self.stepCallback)
     local menu = addon.RXPFrame and addon.RXPFrame.bottomMenu
-    if menu then
+    if menu and not self.menuInstalled then
+        self.menuInstalled = true
+        local previous = {}
+        for _, entry in ipairs(menu) do previous[entry] = true end
         table.insert(menu, #menu, {
             notCheckable = 1,
             text = L("Diagnose this step"),
@@ -367,5 +373,21 @@ function diagnostics:Setup()
                 if addon.travel then addon.travel:OpenCurrentRoute() end
             end
         })
+        self.menuEntries = {}
+        for _, entry in ipairs(menu) do
+            if not previous[entry] then self.menuEntries[entry] = true end
+        end
     end
+end
+
+function diagnostics:Shutdown()
+    if self.eventFrame then self.eventFrame:UnregisterAllEvents() end
+    local menu = addon.RXPFrame and addon.RXPFrame.bottomMenu
+    if menu and self.menuEntries then
+        for index = #menu, 1, -1 do
+            if self.menuEntries[menu[index]] then table.remove(menu, index) end
+        end
+    end
+    self.menuEntries, self.menuInstalled = nil, nil
+    self.setup = false
 end

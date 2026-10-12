@@ -389,6 +389,7 @@ function supplies:GetPurchasePlan()
 end
 
 function supplies:ExecutePurchase(plan)
+    if not addon.settings.profile.enableSuppliesChecklist then return end
     if InCombatLockdown() or not _G.MerchantFrame or
         not _G.MerchantFrame:IsShown() or CursorHasItem() or
         UnitIsDeadOrGhost("player") then return end
@@ -453,6 +454,7 @@ function supplies:BuyMissing()
 end
 
 function supplies:CreateFrame()
+    if self.frame then return end
     local frame = CreateFrame("Frame", "RXPSuppliesFrame", UIParent)
     frame:SetSize(520, 350)
     frame:SetPoint("CENTER")
@@ -516,17 +518,20 @@ function supplies:CreateFrame()
 end
 
 function supplies:Toggle()
+    if not addon.settings.profile.enableSuppliesChecklist then return end
+    self:Setup()
     if not self.frame then self:CreateFrame() end
     self.frame:SetShown(not self.frame:IsShown())
 end
 
 function supplies:Setup()
+    if not addon.settings.profile.enableSuppliesChecklist then return end
     if self.setup then return end
     self.setup = true
     RXPCData.supplyTargets = type(RXPCData.supplyTargets) == "table" and
                                 RXPCData.supplyTargets or {}
     self:CreateFrame()
-    self.eventFrame = CreateFrame("Frame")
+    self.eventFrame = self.eventFrame or CreateFrame("Frame")
     self.eventFrame:RegisterEvent("MERCHANT_SHOW")
     self.eventFrame:RegisterEvent("MERCHANT_CLOSED")
     local bagEvent = addon.events and addon.events.IsEventValid and
@@ -535,11 +540,18 @@ function supplies:Setup()
     self.eventFrame:RegisterEvent(bagEvent)
     self.eventFrame:RegisterEvent("UNIT_PET")
     self.eventFrame:SetScript("OnEvent", function(_, event)
+        if not addon.settings.profile.enableSuppliesChecklist then return end
         if event == "MERCHANT_SHOW" and supplies:IsRelevantMerchant() then
             supplies.frame:Show()
         end
         supplies:Refresh()
     end)
+end
+
+function supplies:Shutdown()
+    if self.eventFrame then self.eventFrame:UnregisterAllEvents() end
+    if self.frame then self.frame:Hide() end
+    self.setup = false
 end
 
 function supplies:IsRelevantMerchant()

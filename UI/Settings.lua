@@ -541,7 +541,10 @@ local settingsDBDefaults = {
         enableRoutePreflight = false,
         enableXPShortfallPredictor = false,
         enableItemReservations = true,
-        enablePetAssistant = true,
+        enablePetAssistant = false,
+        enableStepDoctor = false,
+        enableSuppliesChecklist = false,
+        enablePersonalBestArchives = false,
         enableAdaptivePerformance = false,
         showXPRemaining = true,
         enableMobXPEstimator = true,
@@ -557,9 +560,9 @@ local settingsDBDefaults = {
         xpEstimatorShowAdaptiveKills = true,
         xpEstimatorShowRested = true,
 
-        -- Speedrunning Suite. The coach records lightweight step splits by
-        -- default, while every advisor and active cue remains opt-in.
-        enableSpeedrunSuite = true,
+        -- Speedrunning Suite. The coach records lightweight step splits only
+        -- when the opt-in master switch is enabled; advisors remain opt-in.
+        enableSpeedrunSuite = false,
         enableSpeedrunCoach = true,
         enableSpeedrunGrind = false,
         enableSpeedrunPitStop = false,
@@ -818,6 +821,26 @@ end
 local function GetProfileOption(info) return addon.settings.profile[info[#info]] end
 
 local SPEEDRUN_SETTINGS_OWNER = "settings-speedrun"
+
+function addon.settings:ApplyOptionalToolSettings()
+    for _, spec in ipairs({
+        {"enableStepDoctor", "diagnostics", "step doctor"},
+        {"enableSuppliesChecklist", "supplies", "class supplies"},
+        {"enablePersonalBestArchives", "runArchive", "personal-best archives"},
+        {"enablePetAssistant", "petAssistant", "hunter pet assistant"},
+    }) do
+        local module = addon[spec[2]]
+        local enabled = self.profile[spec[1]] == true
+        if spec[2] == "runArchive" and module then enabled = module:IsEnabled() end
+        if module then
+            if enabled then
+                if addon.roadmap then
+                    addon.roadmap:RunOptional(spec[3], function() module:Setup() end)
+                else module:Setup() end
+            elseif module.Shutdown then module:Shutdown() end
+        end
+    end
+end
 
 function addon.settings:ApplySpeedrunSettings()
     local function ApplyNow()
@@ -1510,15 +1533,24 @@ function addon.settings:CreateAceOptionsPanel()
     local archiveToolPage = ToolAppearancePage(
         L("Personal-Best Archives"), "RXPLevelingArchives", function()
             if addon.runArchive then addon.runArchive:Toggle() end
-        end, function() return not addon.runArchive end,
+        end, function() return not addon.runArchive or not addon.runArchive:IsEnabled() end,
         "Stores anonymous account-wide leveling splits and completed-run summaries so you can compare current pace with earlier attempts.",
         "Open the archive to inspect runs and choose a comparison reference. Splits are recorded from normal guide and level progress; no player name, realm, GUID, chat, guild, or account identifier is stored.")
     archiveToolPage.order = 2
+    archiveToolPage.args.enable = {
+        name = L("Enable Personal-Best Archives"), type = "toggle", order = 2,
+        desc = L("Optional anonymous run archives. The enabled Speedrunning Suite also requires archive recording."),
+        get = function() return self.profile.enablePersonalBestArchives == true end,
+        set = function(_, value)
+            self.profile.enablePersonalBestArchives = value
+            self:ApplyOptionalToolSettings()
+        end,
+    }
     local petToolPage = ToolAppearancePage(
         L("Hunter Pet Assistant"), "RXPHunterPetAssistant", function()
             if addon.petAssistant then addon.petAssistant:Toggle() end
         end, function()
-            return not addon.petAssistant or not addon.player or
+            return not self.profile.enablePetAssistant or not addon.petAssistant or not addon.player or
                        addon.player.class ~= "HUNTER"
         end,
         "Shows Hunter pet status and recommendations for happiness, compatible food, talents, known skills, supplies, and guide-linked taming or stable preparation.",
@@ -2865,9 +2897,7 @@ function addon.settings:CreateAceOptionsPanel()
                                     addon.petAssistant:Setup()
                                 end
                             end
-                            if not value and addon.petAssistant and addon.petAssistant.frame then
-                                addon.petAssistant.frame:Hide()
-                            end
+                            if not value and addon.petAssistant then addon.petAssistant:Shutdown() end
                         end
                     },
                     openPetAssistant = {
@@ -2959,6 +2989,23 @@ function addon.settings:CreateAceOptionsPanel()
                 hidden = addon.gameVersion ~= 30300,
                 args = {
                     routePreflight = preflightToolPage,
+                    optionalTools = {
+                        type = "group", name = L("Optional Tools"), order = 0,
+                        args = {
+                            enableStepDoctor = {
+                                type = "toggle", name = L("Enable Step Doctor"), order = 1,
+                                desc = L("Collects bounded diagnostics and enables the current-step troubleshooting report. Off by default."),
+                                get = function() return self.profile.enableStepDoctor == true end,
+                                set = function(_, value) self.profile.enableStepDoctor = value; self:ApplyOptionalToolSettings() end,
+                            },
+                            enableSuppliesChecklist = {
+                                type = "toggle", name = L("Enable Supplies Checklist"), order = 2,
+                                desc = L("Enables the class-supplies window and merchant checklist. Required-item junk protection remains available when this is off."),
+                                get = function() return self.profile.enableSuppliesChecklist == true end,
+                                set = function(_, value) self.profile.enableSuppliesChecklist = value; self:ApplyOptionalToolSettings() end,
+                            },
+                        },
+                    },
                     archives = archiveToolPage,
                     petAssistant = petToolPage,
                     performance = performanceToolPage,
@@ -5490,6 +5537,7 @@ function addon.settings:RefreshProfile()
     if addon.toolWindows then addon.toolWindows:RestoreAll() end
     if addon.xpAssistant then addon.xpAssistant:ApplySettings() end
     if addon.attackTimer then addon.attackTimer:ApplySettings() end
+    self:ApplyOptionalToolSettings()
     if addon.speedrun then addon.speedrun:ApplySuiteSettings() end
 end
 
@@ -5514,6 +5562,7 @@ function addon.settings:CopyProfile()
     if addon.toolWindows then addon.toolWindows:RestoreAll() end
     if addon.xpAssistant then addon.xpAssistant:ApplySettings() end
     if addon.attackTimer then addon.attackTimer:ApplySettings() end
+    self:ApplyOptionalToolSettings()
     if addon.speedrun then addon.speedrun:ApplySuiteSettings() end
 end
 

@@ -17,6 +17,12 @@ local archive = addon.runArchive
 local MAX_RUNS = 30
 local ROWS = 12
 
+function archive:IsEnabled()
+    local profile = addon.settings.profile
+    -- The explicitly enabled speedrun suite uses this store for its runs/PBs.
+    return profile.enablePersonalBestArchives == true or profile.enableSpeedrunSuite == true
+end
+
 local function Store()
     RXPData.levelingArchives = type(RXPData.levelingArchives) == "table" and
                                     RXPData.levelingArchives or {}
@@ -83,6 +89,7 @@ function archive:Prune()
 end
 
 function archive:NewRun(silent)
+    if not self:IsEnabled() then return end
     local store = Store()
     local id = store.nextId
     store.nextId = id + 1
@@ -117,6 +124,7 @@ function archive:NewRun(silent)
 end
 
 function archive:GetCurrent(create)
+    if not self:IsEnabled() then return end
     local runs = Store().runs
     local id = tonumber(RXPCData.levelingArchiveRunId)
     local run = id and runs[id]
@@ -129,6 +137,7 @@ function archive:GetCurrent(create)
 end
 
 function archive:Snapshot()
+    if not self:IsEnabled() then return end
     local run = self:GetCurrent(true)
     local tracker = addon.tracker
     local levels = tracker and tracker.db and tracker.db.profile and
@@ -153,6 +162,7 @@ function archive:Snapshot()
 end
 
 function archive:RecordGuide(guide)
+    if not self:IsEnabled() then return end
     if addon.speedrunPracticeActive then return end
     local run = self:GetCurrent(true)
     if type(guide) ~= "table" or guide.empty then return end
@@ -427,16 +437,20 @@ function archive:CreateWindow()
 end
 
 function archive:Toggle()
+    if not self:IsEnabled() then return end
+    self:Setup()
     if not self.frame then self:CreateWindow() end
     if self.frame:IsShown() then self.frame:Hide() else self.frame:Show() end
 end
 
 function archive:Setup()
+    if not self:IsEnabled() then return end
     if self.setup then return end
     self.setup = true
     Store()
     self:GetCurrent(true)
     addon:RegisterMessage("RXP_LEVEL_TIME_RECORDED", function()
+        if not archive:IsEnabled() then return end
         archive:Snapshot()
         local maxLevel = addon.tracker and addon.tracker.maxLevel or
                              (type(_G.GetMaxPlayerLevel) == "function" and
@@ -448,8 +462,14 @@ function archive:Setup()
     addon:RegisterMessage("RXP_GUIDE_LOADED", function(_, guide)
         archive:RecordGuide(guide)
     end)
-    local frame = CreateFrame("Frame")
+    local frame = self.eventFrame or CreateFrame("Frame")
     pcall(frame.RegisterEvent, frame, "PLAYER_LOGOUT")
     frame:SetScript("OnEvent", function() archive:Snapshot() end)
     self.eventFrame = frame
+end
+
+function archive:Shutdown()
+    if self.eventFrame then self.eventFrame:UnregisterAllEvents() end
+    if self.frame then self.frame:Hide() end
+    self.setup = false
 end

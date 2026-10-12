@@ -4,6 +4,13 @@ local addonName, addon = ...
 local L = LibStub("AceLocale-3.0"):NewLocale(addonName, "enUS", true, 'raw')
 
 -- Attack Timer UI inventory; companion locale packs can translate these keys.
+L["Optional Tools"] = true
+L["Enable Step Doctor"] = true
+L["Enable Supplies Checklist"] = true
+L["Enable Personal-Best Archives"] = true
+L["Optional anonymous run archives. The enabled Speedrunning Suite also requires archive recording."] = true
+L["Collects bounded diagnostics and enables the current-step troubleshooting report. Off by default."] = true
+L["Enables the class-supplies window and merchant checklist. Required-item junk protection remains available when this is off."] = true
 L["Attack Timer"] = true
 L["Enable Attack Timer"] = true
 L["Show Attack Timers"] = true

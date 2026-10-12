@@ -1174,6 +1174,7 @@ function speedrun:ApplySettings()
 end
 
 function speedrun:EnsureLiveSetup()
+    if not addon.settings.profile.enableSpeedrunSuite then return false end
     local advisorsReady = not addon.speedrunAdvisors or
                               addon.speedrunAdvisors.setup
     local practiceReady = not addon.speedrunPractice or
@@ -1208,6 +1209,14 @@ function speedrun:EnsureLiveSetup()
 end
 
 function speedrun:ApplySuiteSettings()
+    if not addon.settings.profile.enableSpeedrunSuite then
+        if addon.speedrunPractice and addon.speedrunPractice.setup then addon.speedrunPractice:Shutdown() end
+        if addon.speedrunAdvisors and addon.speedrunAdvisors.setup then addon.speedrunAdvisors:Shutdown() end
+        if self.setup then self:Shutdown() end
+        if addon.runArchive and not addon.runArchive:IsEnabled() then addon.runArchive:Shutdown() end
+        return true
+    end
+    if addon.runArchive then addon.runArchive:Setup() end
     if not self:EnsureLiveSetup() then return false end
     self:ApplySettings()
     if addon.speedrunAdvisors and addon.speedrunAdvisors.ApplySettings then
@@ -1286,6 +1295,7 @@ function speedrun:UnregisterMessages()
 end
 
 function speedrun:Setup()
+    if not addon.settings.profile.enableSpeedrunSuite then return end
     if self.setup then self:ApplySettings() return end
     self:EnsureStores()
     local run = self:EnsureRun(self:GetRun(true))

@@ -226,6 +226,8 @@ function pet:CreateWindow()
 end
 
 function pet:Toggle()
+    if not addon.settings.profile.enablePetAssistant then return end
+    self:Setup()
     if not IsHunter() then
         addon.comms.PrettyPrint(L("The Pet Assistant is available to Hunters."))
         return
@@ -235,15 +237,17 @@ function pet:Toggle()
 end
 
 function pet:ScheduleRefresh()
+    if not addon.settings.profile.enablePetAssistant then return end
     addon.scheduler:After(self, "pet-refresh", 0.15, function()
-        pet:Refresh()
+        if addon.settings.profile.enablePetAssistant then pet:Refresh() end
     end)
 end
 
 function pet:Setup()
+    if not addon.settings.profile.enablePetAssistant then return end
     if self.setup or not IsHunter() then return end
     self.setup = true
-    local eventFrame = CreateFrame("Frame")
+    local eventFrame = self.eventFrame or CreateFrame("Frame")
     local events = {"UNIT_PET", "PET_UI_UPDATE", "PET_BAR_UPDATE",
         "PET_HAPPINESS_UPDATE", "UNIT_HEALTH", "UNIT_LEVEL", "PET_TALENT_UPDATE",
         "PLAYER_TALENT_UPDATE", "BAG_UPDATE", "SPELLS_CHANGED", "PET_STABLE_SHOW",
@@ -259,4 +263,11 @@ function pet:Setup()
     self.eventFrame = eventFrame
     addon:RegisterMessage("RXP_STEP_ACTIVATED", function() pet:ScheduleRefresh() end)
     addon:RegisterMessage("RXP_GUIDE_LOADED", function() pet:ScheduleRefresh() end)
+end
+
+function pet:Shutdown()
+    addon.scheduler:CancelOwner(self)
+    if self.eventFrame then self.eventFrame:UnregisterAllEvents() end
+    if self.frame then self.frame:Hide() end
+    self.setup = false
 end

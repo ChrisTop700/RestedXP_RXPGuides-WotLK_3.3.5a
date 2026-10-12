@@ -3683,7 +3683,7 @@ function RXPFrame:GenerateMenuTable(menu)
         {
             text = L("Personal-Best Archives"),
             notCheckable = 1,
-            disabled = not addon.runArchive,
+            disabled = not addon.runArchive or not addon.runArchive:IsEnabled(),
             func = function()
                 if addon.runArchive then addon.runArchive:Toggle() end
             end
@@ -3692,6 +3692,7 @@ function RXPFrame:GenerateMenuTable(menu)
             text = L("Hunter Pet Assistant"),
             notCheckable = 1,
             disabled = not addon.petAssistant or
+                           not addon.settings.profile.enablePetAssistant or
                            select(2, UnitClass("player")) ~= "HUNTER",
             func = function()
                 if addon.petAssistant then addon.petAssistant:Toggle() end

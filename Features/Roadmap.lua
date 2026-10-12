@@ -882,7 +882,7 @@ function roadmap:Setup()
         self:RunOptional("personal-best archives",
             function() addon.runArchive:Setup() end)
     end
-    if addon.speedrun and addon.speedrun.Setup then
+    if addon.speedrun and addon.speedrun.Setup and addon.settings.profile.enableSpeedrunSuite then
         self:RunOptional("speedrunning suite", function()
             addon.speedrun:Setup()
             if addon.speedrunAdvisors then addon.speedrunAdvisors:Setup() end
@@ -892,6 +892,12 @@ function roadmap:Setup()
             if addon.speedrunAdvisors then addon.speedrunAdvisors:Shutdown() end
             if addon.speedrunPractice then addon.speedrunPractice:Shutdown() end
         end)
+    end
+    -- Recover a saved shadow session even when the suite is now disabled.
+    if not addon.settings.profile.enableSpeedrunSuite and addon.speedrunPractice and
+        RXPCData.speedrunSession and RXPCData.speedrunSession.practiceRestore then
+        addon.speedrunPractice:Setup()
+        addon.speedrunPractice:Shutdown()
     end
     if addon.petAssistant and addon.petAssistant.Setup and
         addon.settings.profile.enablePetAssistant then
