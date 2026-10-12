@@ -20,6 +20,7 @@ manager.knownNames = manager.knownNames or {
     "RXPHunterPetAssistant",
     "RXPLevelingArchives",
     "RXPXPProgressWindow",
+    "RXPAttackTimerWindow",
     "RXPSpeedrunCoachWindow",
     "RXPSpeedrunGrindWindow",
     "RXPSpeedrunPitStopWindow",

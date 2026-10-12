@@ -119,6 +119,8 @@ Features\GuideAnalysis.lua
 Features\RunArchive.lua
 Features\PetAssistant.lua
 Features\XPAssistant.lua
+Features\AttackTiming.lua
+Features\AttackTimer.lua
 Features\SpeedrunCore.lua
 Features\SpeedrunAdvisors.lua
 Features\SpeedrunPractice.lua

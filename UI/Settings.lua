@@ -545,6 +545,11 @@ local settingsDBDefaults = {
         enableAdaptivePerformance = false,
         showXPRemaining = true,
         enableMobXPEstimator = true,
+        enableAttackTimer = false,
+        attackTimerCoupled = true,
+        attackTimerShowTimers = true,
+        attackTimerShowDamage = true,
+        attackTimerShowSpeed = true,
         adaptiveMobXP = true,
         xpEstimatorShowStockXP = true,
         xpEstimatorShowKills = true,
@@ -1470,6 +1475,31 @@ function addon.settings:CreateAceOptionsPanel()
         }
     end
 
+    local attackToolPage = ToolAppearancePage(
+        L("Attack Timer"), "RXPAttackTimerWindow", function()
+            if addon.attackTimer then addon.attackTimer:Toggle() end
+        end, function() return not addon.attackTimer or not addon.attackTimer:IsEnabled() end,
+        "Shows estimated basic melee and Hunter Auto Shot timing, current character-sheet damage ranges, and attack intervals. It never attacks or moves for you.",
+        "Enable this tool, then click Open Tool. Attack to synchronize. Unknown timers are intentional after equipment, form, speed or ability changes. Dual-wield hand timing and wand timing are not inferred. Ready does not guarantee range, facing or line of sight. Damage excludes target mitigation and critical hits.")
+    attackToolPage.order = 6
+    for index, option in ipairs({
+        {"enableAttackTimer", "Enable Attack Timer"},
+        {"attackTimerShowTimers", "Show Attack Timers"},
+        {"attackTimerShowDamage", "Show Damage Ranges"},
+        {"attackTimerShowSpeed", "Show Attack Intervals"},
+        {"attackTimerCoupled", "AzerothCore Melee/Ranged Timer Resets"},
+    }) do
+        local key, label = option[1], option[2]
+        attackToolPage.args[key] = {
+            type = "toggle", name = L(label), order = 2 + index / 10,
+            desc = L("Changes apply immediately. Coupled resets model AzerothCore basic attacks; turn this off only if your server uses independent melee and ranged timers."),
+            get = function() return self.profile[key] == true end,
+            set = function(_, value)
+                self.profile[key] = value
+                if addon.attackTimer then addon.attackTimer:ApplySettings() end
+            end,
+        }
+    end
     local preflightToolPage = ToolAppearancePage(
         L("Route Preflight"), "RXPRoutePreflightWindow", function()
             if addon.routePreflight then addon.routePreflight:Toggle() end
@@ -2933,6 +2963,7 @@ function addon.settings:CreateAceOptionsPanel()
                     petAssistant = petToolPage,
                     performance = performanceToolPage,
                     xpEstimator = xpToolPage,
+                    attackTimer = attackToolPage,
                     speedrunning = speedrunningToolPage,
                 },
             },
@@ -5458,6 +5489,7 @@ function addon.settings:RefreshProfile()
     addon.settings:LoadFramePositions()
     if addon.toolWindows then addon.toolWindows:RestoreAll() end
     if addon.xpAssistant then addon.xpAssistant:ApplySettings() end
+    if addon.attackTimer then addon.attackTimer:ApplySettings() end
     if addon.speedrun then addon.speedrun:ApplySuiteSettings() end
 end
 
@@ -5481,6 +5513,7 @@ function addon.settings:CopyProfile()
     addon.settings:LoadFramePositions()
     if addon.toolWindows then addon.toolWindows:RestoreAll() end
     if addon.xpAssistant then addon.xpAssistant:ApplySettings() end
+    if addon.attackTimer then addon.attackTimer:ApplySettings() end
     if addon.speedrun then addon.speedrun:ApplySuiteSettings() end
 end
 

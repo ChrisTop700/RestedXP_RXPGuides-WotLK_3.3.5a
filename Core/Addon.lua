@@ -2344,6 +2344,17 @@ local function RegisterRuntimeSubsystems()
                                     "itemUpgrades")
             addon.itemUpgrades:Setup()
         end)
+    if addon.attackTimer then
+        addon.runtime:Register({
+            id = "attack-timer", label = "attack timer", optional = true,
+            depends = {"settings", "guide-ui"},
+            initialize = function()
+                addon.services:Register("attack-timer", addon.attackTimer, "attackTimer")
+                addon.attackTimer:ApplySettings()
+            end,
+            disable = function() addon.attackTimer:Shutdown() end,
+        })
+    end
     if addon.xpAssistant and addon.xpAssistant.Setup then
         addon.runtime:Register({
             id = "xp-assistant",

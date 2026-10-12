@@ -3643,6 +3643,11 @@ function RXPFrame:GenerateMenuTable(menu)
 
     local featureTools = {
         {
+            text = L("Attack Timer"), notCheckable = 1,
+            disabled = not addon.attackTimer or not addon.attackTimer:IsEnabled(),
+            func = function() if addon.attackTimer then addon.attackTimer:Toggle() end end,
+        },
+        {
             text = L("Speedrunning Suite"), notCheckable = 1, hasArrow = true,
             disabled = addon.settings.profile.enableSpeedrunSuite == false,
             menuList = speedrunTools,
