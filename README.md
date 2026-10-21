@@ -1,442 +1,111 @@
-# RestedXP Guides — WotLK 3.3.5a Backport
+# RestedXP Guides — WotLK 3.3.5a
 
-A standalone community backport of **RestedXP Guides** for **World of Warcraft: Wrath of the Lich King 3.3.5a (build 12340)**.
+A standalone, community-maintained backport of **RestedXP Guides** for **World of Warcraft: Wrath of the Lich King 3.3.5a (build 12340)**.
 
-This project adapts the RestedXP guide engine, interface, automation, navigation, talent guides, and supporting tools to the original 3.3.5a API. It is primarily developed and tested against AzerothCore and does not require Questie, ElvUI, WeakAuras, or another addon to run.
+Follow step-by-step Alliance and Horde leveling guides through level 80, with navigation, quest assistance and optional tools. Primarily developed and tested on **AzerothCore**; other WotLK servers may behave differently. This is not the official current RestedXP addon and does not require Questie, ElvUI, WeakAuras or other addons.
 
 [![Download](https://img.shields.io/badge/Download-Latest_Release-2ea043?style=for-the-badge&labelColor=555555)](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/releases/latest)
-[![Install](https://img.shields.io/badge/Install-Quickly-8250df?style=for-the-badge&labelColor=555555)](#quick-install)
+[![Install](https://img.shields.io/badge/Install-Quickly-8250df?style=for-the-badge&labelColor=555555)](#quick-install-and-updates)
 
-![Version](https://img.shields.io/badge/Version-v4.8.25--335-1f6feb)
-![Client](https://img.shields.io/badge/Client-WotLK_3.3.5a-blue)
-![Build](https://img.shields.io/badge/Build-12340-yellow)
-![Runtime](https://img.shields.io/badge/Runtime-Standalone-brightgreen)
+## Main features
 
-## Version
+- **Leveling guides:** Classic, TBC and WotLK progression, including Death Knight and boosted-character entry routes.
+- **More activities:** dungeon quests, reputation, attunements, endgame chains, dailies, gathering and farming guides.
+- **Navigation:** waypoint arrows, map pins, route lines and flight-path guidance.
+- **Quest assistance:** configurable auto-accept, turn-in and reward handling, plus guide-related target and item buttons.
+- **Character support:** talent guidance, equipment recommendations, quest-reward comparisons, junk management and vendor repairs.
+- **Optional tools:** XP estimates, Attack Timer, leveling splits, Hunter assistance, speedrunning tools and more.
+- **Personalization:** themes, fonts, window sizing, optional translations and separate guide progress for each character.
 
-- Addon version: **v6.11.1**
-- Intended client: **WotLK 3.3.5a / build 12340**
-- Primary server target: **AzerothCore**
-- Interface number: **30300**
+Enable only the extras you want in **Settings → Feature Tools**. Each tool's page explains its purpose and controls. See [the feature reference](FEATURES_335.md) for more tools and commands.
 
-## Repository Scope
+## Quick install and updates
 
-The release ships only the `RXPGuides.toc` manifest for the original 3.3.5a
-client. Cataclysm, Mists of Pandaria, Retail, and Season of Discovery content,
-newer-client manifests, and duplicate modern libraries are intentionally
-excluded. Classic, TBC, and WotLK data—as well as dormant feature sources that
-may support future backports—remain in the repository.
+1. Close World of Warcraft and open the [latest release](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/releases/latest).
+2. Under **Assets**, download `RXPGuides-<version>.zip`. For translations, also download the matching language pack from that same release.
+3. When updating, back up your `WTF` folder, then remove the old `RXPGuides` addon folder and any installed `RXPGuides_Locale_*` folders you are replacing. **Do not delete `WTF`: it contains your settings and character progress.**
+4. Extract the ZIPs into `Interface\AddOns\`. Do not merge old and new addon files or introduce an extra enclosing folder.
+5. Enable **RestedXP Guides** and your optional language pack on the character-selection **AddOns** screen. Enable **Load out of date AddOns** if needed.
 
-
-## Who This Is For
-
-This addon is intended for:
-
-- Players using a World of Warcraft **3.3.5a (12340)** client.
-- AzerothCore and compatible WotLK private-server environments.
-- Players who want step-by-step Alliance and Horde leveling routes through level 80.
-- Players who want RestedXP-style navigation, quest automation, targeting, talent guidance, and gear assistance on the legacy client.
-- Developers and guide authors maintaining or testing 3.3.5a routes.
-
-The supported target is the stock 3.3.5a API. Custom clients and other server cores may work, but can expose different quest, map, taxi, item, or event behavior.
-
-## What You Get
-
-- Step-by-step leveling and quest guidance for both factions.
-- Classic, TBC, and WotLK leveling progression through level 80.
-- Death Knight and boosted-character entry routes.
-- TBC dungeon quest, reputation, and attunement guides.
-- WotLK daily quest guides, gathering guides, and farming guides.
-- Waypoint arrows, world-map pins, route lines, and flight-path support.
-- Automatic quest acceptance, turn-in, reward handling, quest sharing, and supported confirmation interactions.
-- Per-character guide selection and exact step restoration.
-- Active Targets with friendly and hostile target lists, portraits, secure target buttons, and visible-nameplate discovery.
-- Active Item buttons for guide-related items and actions.
-- Talent guides with automatic active-spec selection where supported.
-- Leveling splits, played-time tracking, XP reports, and flight timers.
-- Item-upgrade scoring, upgrade prompts, quest-reward recommendations, junk management, quiver handling, and a legacy Auction House upgrade scanner.
-- Automatic vendor repair using personal or guild funds when enabled.
-- Vendor Treasure pins on supported world maps.
-- Bundled 3.3.5-compatible libraries for standalone operation.
-
-## What Stayed the Same
-
-The established RestedXP workflow remains familiar:
-
-- Guide parsing and step progression.
-- Guide groups, chapters, conditions, and imported-guide support.
-- Current-step and step-list presentation.
-- Waypoint arrow and map-pin navigation.
-- Quest, item, target, flight, hearthstone, and travel directives.
-- Themes, font sizing, window scaling, and frame locking.
-- Character-specific guide and step progress.
-- Account and character settings stored through WoW SavedVariables.
-
-Existing guide keys and save structures are retained wherever possible so updates do not unnecessarily reset character progress.
-
-## What's New in the 3.3.5a Backport
-
-- A broad compatibility layer for modern `C_*`, `Enum`, map, quest, taxi, action-bar, death, and interaction APIs used by the RestedXP runtime.
-- Standalone bundled Ace3, LibDataBroker, LibDBIcon, HereBeDragons/Astrolabe, serialization, communication, timer, and UI dependencies.
-- Legacy quest automation designed around 3.3.5a's title-based gossip and quest events, including same-NPC turn-in/follow-up acceptance handling.
-- A flattened legacy guide picker with faction, race, class, XP-rate, and guide-profile filtering.
-- Validated Classic, TBC, and converted WotLK routes with repaired quest dependencies, transitions, coordinates, targets, and flight names.
-- A stock-client nameplate scanner and secure targeting controls without runtime dependence on ElvUI or WeakAuras.
-- Client-local target markers and an Active Targets window that persists for the current step.
-- Live legacy settings for guide font size, targeting frequency, target range, repairs, vendor pins, and other 3.3.5a features.
-- A legacy talent-guide interface and class/spec guide selection.
-- 3.3.5-aware item parsing, weapon and armor proficiency checks, two-hand/off-hand comparisons, reward selection, and upgrade prompts.
-- Protected consumables, equipment-aware junk classification, manual junk overrides, Soul Shard limits, and ammunition/quiver management.
-- Legacy group communications, quest sharing, corpse navigation, emergency-action detection, hearthstone batching, and taxi timers.
-- World-map UI coordination so the guide, Active Targets, level splits, menus, and vendor pins behave correctly on the fullscreen legacy map.
-- Offline validators for guide structure, quest flow, and talent plans.
-- Display-only multilingual guides with live Original English switching,
-  official client names, reviewed translations, and clearly marked `[MT]` or
-  `[EN]` fallbacks that never feed quest automation.
-
-## Key Controls
-
-### Minimap and world map
-
-- **Minimap icon, left-click:** toggle enabled RestedXP frames.
-- **Minimap icon, right-click:** open the RestedXP menu.
-- **World-map RestedXP icon:** open or close the map-safe RestedXP menu.
-- **Guide footer cog:** open guide selection and step controls.
-
-### Keybindings
-
-The following actions can be assigned under the game's **Key Bindings** menu:
-
-- Cycle RestedXP targeting.
-- Delete the cheapest junk item.
-- Use Active Item buttons 1–4.
-- Target Friendly Target buttons 1–4.
-- Target Enemy Target buttons 1–4.
-- Start, pause, or resume Segment Practice.
-- Record a manual Segment Practice split.
-
-Targeting actions use secure buttons and still require a physical key or mouse press, as required by the 3.3.5a client.
-
-### Slash commands
-
-- `/rxp` — open addon settings.
-- `/rxp import` — open the guide import page.
-- `/rxp debug` — toggle debug output.
-- `/rxp splits` — toggle the Level Splits window.
-- `/rxp show`, `/rxp hide`, or `/rxp toggle` — toggle enabled addon frames.
-- `/rxp next` — move to the next guide step.
-- `/rxp prev` — move to the previous guide step.
-- `/rxp step <number>` or `/rxp goto <number>` — move to a specific step.
-- `/rxp browse` — freeze or resume automatic step progression while reviewing a guide.
-- `/rxp preview` — preview movable addon frames.
-- `/rxp bug` or `/rxp feedback` — open the feedback form.
-- `/rxp help` — show command help.
-
-Roadmap tools are also available directly:
-
-- `/rxp guides` opens the searchable Guide Hub.
-- `/rxp backup` opens sanitized backup export/import.
-- `/rxp diagnose` opens Step Doctor for the current step.
-- `/rxp supplies` opens the class-supplies merchant checklist.
-- `/rxp gear` opens the complete-layout Gear Advisor.
-- `/rxp dailies` opens the WotLK daily and weekly planner.
-- `/rxp record` opens the opt-in Guide Author recorder.
-- `/rxp preflight` opens upcoming route, XP-shortfall, and item-reservation checks.
-- `/rxp watch` explicitly arms or stops the watchdog for the current step.
-- `/rxp archives` opens anonymous account-wide personal-best archives.
-- `/rxp pet` opens the Hunter Pet Assistant.
-- `/rxp perf` opens the Performance Inspector and sanitized capture tools.
-- `/rxp coach` opens the Live Speedrun Coach.
-- `/rxp grind` opens the Dynamic Grind Optimizer.
-- `/rxp pitstop` opens the Pit Stop Planner.
-- `/rxp route` opens the Adaptive Route Strategist when it is enabled;
-  `/rxp recover` always opens the conservative return-route planner.
-- `/rxp deathwarp` opens the Deathwarp Decision Assistant.
-- `/rxp practice` opens the Segment Practice Lab.
-- `/rxp audio` opens the Speedrun Audio Director.
-- `/rxp rules` opens the active run ruleset and integrity report.
-
-The aliases `/rxpg` and `/rxpguides` are also registered. See
-[FEATURES_335.md](FEATURES_335.md) for the roadmap services, privacy boundaries,
-and safe-mode behavior.
-
-Translation contributors can find the deterministic extraction, token-safety,
-catalog, and validation workflow in [LOCALIZATION.md](LOCALIZATION.md).
-
-## Quick Install
-
-### Installation overview
-
-1. Open the [latest GitHub Release](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/releases/latest).
-2. Under **Assets**, download `RXPGuides-<version>.zip`.
-3. For translated guides and complete localized UI text, also download the
-   `RXPGuides_Locale_<locale>-<version>.zip` matching your client, such as
-   `RXPGuides_Locale_zhCN-<version>.zip`.
-4. Extract the core ZIP and optional locale ZIP directly into your WoW
-   `Interface\AddOns\` directory.
-5. Launch the game and enable **RestedXP Guides**. The matching installed
-   language pack is loaded automatically.
-
-Locale assets correspond to client languages as follows:
-
-| Client language | Locale asset |
-| --- | --- |
-| German | `RXPGuides_Locale_deDE-<version>.zip` |
-| Spanish (Spain) | `RXPGuides_Locale_esES-<version>.zip` |
-| French | `RXPGuides_Locale_frFR-<version>.zip` |
-| Russian | `RXPGuides_Locale_ruRU-<version>.zip` |
-| Korean | `RXPGuides_Locale_koKR-<version>.zip` |
-| Simplified Chinese | `RXPGuides_Locale_zhCN-<version>.zip` |
-| Traditional Chinese | `RXPGuides_Locale_zhTW-<version>.zip` |
-
-English clients need only the core `RXPGuides-<version>.zip` archive.
-
-> [!IMPORTANT]
-> Download the `RXPGuides-<version>.zip` file listed under **Assets**. Do **not** use GitHub's automatically generated **Source code (zip)** or **Source code (tar.gz)** downloads: those use the repository name as their outer folder and will not produce the required addon path automatically.
-
-### Detailed steps
-
-1. Close World of Warcraft.
-2. Visit the repository's [Releases page](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/releases).
-3. Open the newest release and expand **Assets** if necessary.
-4. Download the packaged core release asset. Its name follows this format:
-
-   ```text
-   RXPGuides-v4.8.25-335.zip
-   ```
-
-   If desired, download the separate asset matching the language of your
-   client. For example:
-
-   ```text
-   RXPGuides_Locale_deDE-v4.8.25-335.zip
-   RXPGuides_Locale_zhTW-v4.8.25-335.zip
-   ```
-
-5. Open your WoW installation and navigate to:
-
-   ```text
-   Interface\AddOns\
-   ```
-
-6. If an older `RXPGuides` folder exists, remove or rename that addon folder before extracting the update. Do not merge releases file by file, because obsolete Lua or XML files can remain loaded.
-7. Extract the downloaded ZIP or ZIPs directly into `Interface\AddOns\`. The
-   release workflow places the core and each optional locale in their correct
-   addon folders.
-8. Confirm this exact path exists:
-
-   ```text
-   Interface\AddOns\RXPGuides\RXPGuides.toc
-   ```
-
-9. Start the game, open **AddOns** on the character-selection screen, and enable **RestedXP Guides**.
-10. Enable **Load out of date AddOns** if your custom client reports the addon as outdated.
-
-An installed German companion, for example, has this separate path:
+Check that this exact path exists:
 
 ```text
-Interface\AddOns\RXPGuides_Locale_deDE\RXPGuides_Locale_deDE.toc
+Interface\AddOns\RXPGuides\RXPGuides.toc
 ```
 
-Do not place locale-pack files inside the core `RXPGuides` folder. Removing a
-locale companion simply returns guide display to safe English fallbacks and
-does not affect progress or automation.
+> Download the packaged asset, **not** GitHub's automatic **Source code (zip)** or **Source code (tar.gz)** download.
 
-The finished installation must not contain an extra folder level such as:
+### Optional language packs
 
-```text
-Interface\AddOns\RestedXP_RXPGuides-WotLK_3.3.5a-v4.8.25-335\RXPGuides\
-```
+English needs only the core addon. Other clients can install `RXPGuides_Locale_<locale>-<version>.zip`:
 
-## Common Issues
+**German** `deDE` · **Spanish (Spain)** `esES` · **French** `frFR` · **Russian** `ruRU` · **Korean** `koKR` · **Simplified Chinese** `zhCN` · **Traditional Chinese** `zhTW`.
 
-### Addon not appearing in-game
+For example, the German pack belongs in `Interface\AddOns\RXPGuides_Locale_deDE\`, beside the core addon, not inside it. Update both together. Missing translations fall back to English; `[EN]` marks fallback text and `[MT]` marks machine-translated text. Translation affects display, not guide progress or quest actions.
 
-- Confirm the folder path is `Interface\AddOns\RXPGuides\RXPGuides.toc`.
-- Make sure you downloaded the packaged `RXPGuides-<version>.zip` release asset, not GitHub's source archive.
-- Remove accidental double-folder nesting created during extraction.
-- Enable **Load out of date AddOns**.
-- Check that the addon is enabled for the current character.
-- Avoid merging a new release into an older addon folder.
+## Getting started
 
-### Translated guide text is unavailable
+1. Log in and choose a starting guide using the **guide-window cog** or **right-click minimap menu**. A fresh character intentionally begins with no guide selected.
+2. Use `/rxp guides` to search guides, manage favorites and return to recent chapters. Your selection and progress are saved separately for each character.
+3. Open `/rxp` to adjust settings, including quest automation, appearance and optional tools.
 
-- Download the locale asset whose code matches the game client: `deDE`,
-  `esES`, `frFR`, `ruRU`, `koKR`, `zhCN`, or `zhTW`.
-- Confirm its folder sits beside `RXPGuides`, not inside it.
-- Enable the locale companion in the character-selection AddOns list. The
-  core loads the matching enabled companion on demand.
-- Locale companions must come from the same release as the core addon.
+Left-clicking the minimap icon shows or hides enabled addon frames. The game's **Key Bindings** menu includes targeting, guide-item and other addon actions.
 
-### A new character shows an empty guide window
+Useful commands:
 
-This is intentional. New characters begin without a selected guide so one character cannot inherit another character's route and step. Open the guide picker and choose the appropriate starting chapter.
+- `/rxp` — settings.
+- `/rxp guides` — searchable Guide Hub.
+- `/rxp show` or `/rxp hide` — show or hide enabled frames.
+- `/rxp browse` — pause or resume automatic progression while reviewing steps.
+- `/rxp help` — command help.
 
-Characters that already selected a guide should restore their own guide and step after `/reload`, logout, or character switching.
+### Choosing a guide collection
 
-### Some guides are hidden or disabled
+- **Validated & Fixed Guides:** routes maintained for this backport, including local quest-flow and travel corrections.
+- **Original Upstream Guides:** alternative routes retaining upstream itineraries. These are separate from the locally curated routes, not automatically faster for every character.
 
-The picker filters guides by faction, race, class, level, XP rate, prerequisites, and route conditions. Enable **Show unused guides** to inspect incompatible or currently filtered entries.
+Availability depends on faction, race, class, level and route conditions. **Show unused guides** can reveal filtered entries. Switching collections does not transfer progress between differently identified guides.
 
-Some mutually exclusive routes, such as Aldor and Scryer chapters, remain unavailable until their conditions are satisfied.
+### Experimental Hardcore guides
 
-### A guide does not progress
+Three optional level-1–60 families appear alongside the regular guides:
 
-- Make sure `/rxp browse` is not enabled.
-- Confirm the quest ID and objective state match the server.
-- Use `/rxp next` only as a temporary workaround.
-- Record the guide name, step number, quest ID, and any BugGrabber stack trace when reporting the problem.
+| Family | Guide collection | Routing |
+| --- | --- | --- |
+| **Curated Experimental** | Validated & Fixed Guides | All ten races; native Kalimdor progression for Orcs, Trolls and Tauren. Finishes in Azeroth. |
+| **Upstream Classic** | Original Upstream Guides | Original eight races; Classic Survival itineraries adapted for 3.3.5. Finishes in Azeroth. |
+| **Upstream TBC** | Original Upstream Guides | All ten races; TBC Survival itineraries adapted for 3.3.5, including Horde Eversong/Ghostlands transfers and Hellfire through level 60. |
 
-Custom server quest chains can differ from AzerothCore's reference data and may require a server-specific guide correction.
+Selecting a Hardcore guide requests confirmation to enable Hardcore mode. Families keep independent progress. Choose a non-Hardcore guide before disabling the mode while a Hardcore-only guide is active.
 
-### Active Targets does not discover a distant unit automatically
+**These are experimental deathless-oriented routes, not enforced server rules or a guarantee of survival.** Later chapters have not all received complete gameplay testing. The normal Death Knight starter remains separate.
 
-The stock 3.3.5a API does not provide a general list of every rendered unit. Passive discovery uses visible stock nameplates plus target and mouseover information. Enable the relevant nameplates or use the secure RestedXP targeting keybinding for targets that are not represented by a visible nameplate.
+## Compatibility and troubleshooting
 
-### Item information or junk overlays appear late
+- **Using Questie?** Keep Questie's auto-accept and auto-turn-in disabled when RXPGuides quest automation is enabled. Questie tracking can remain on; avoid running both automation systems together.
+- **Addon or translations missing?** Check the folder paths, character-selection AddOns list and matching core/language-pack versions.
+- **Guide not advancing?** Check whether Browse Mode is active and whether the quest objective is actually complete. Report the guide and step if it remains stuck; do not skip required work just to clear the instruction.
+- **Some actions remain manual.** Targeting and item buttons require player input. Flights, reward choices and scripted events may need manual interaction when the addon cannot safely determine the next action.
+- **Targets or item details appear late?** Passive target discovery relies on visible nameplates, your target and mouseover. Item information can also take a moment to load; manual useful/junk choices take priority.
+- **Server-specific quests:** custom servers can change requirements or remove content. Legacy Onyxia attunement needs Individual Progression or equivalent quest restoration; follow the guide's opening warning.
 
-The legacy client can deliver item data asynchronously. Bag, loot, item-info, equipment, skill, and spellbook events trigger rescans, but an uncached item may require a short moment or a tooltip query before all comparison data is available.
+## Custom guides and support
 
-Manual useful/junk choices take priority over automatic classification.
+Additional community routes live on the [custom-guides branch](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/tree/custom-guides) and are not bundled with the main download. Copy a guide's text and paste it into `/rxp import`. Authors can use the [custom-guide contribution instructions](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/blob/custom-guides/CustomGuides/README.md).
 
-## Reporting Issues and Suggesting Features
+Report bugs or suggest features through [GitHub Issues](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/issues). For bugs, include:
 
-Please use the repository's [Issues tab](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/issues) for reproducible problems and feature proposals. Search the open and closed issues first to avoid creating a duplicate.
+- Addon version, server/core and character race, class and level.
+- Guide collection, chapter, step and relevant quest ID.
+- Reproduction steps, expected behavior and what actually happened.
+- Complete BugGrabber/BugSack error text, if available, and whether it happens with other addons disabled.
 
-### Bug reports
+Remove player names, account details and other private information from screenshots or logs. For feature requests, explain the player-facing problem and your suggested behavior.
 
-Create a new issue and apply the **`bug`** label. Include as much of the following information as possible:
+Further reading: [features and tools](FEATURES_335.md) · [translation contributions](LOCALIZATION.md) · [changelog](CHANGELOG.md).
 
-- A short, specific description of what went wrong.
-- The addon version and confirmation that the client is WotLK 3.3.5a build 12340.
-- The server core and revision, when known.
-- The character's faction, race, class, level, and relevant profession or weapon training.
-- The guide group, chapter, and exact step number.
-- Relevant quest, item, spell, NPC, map, or flight-node IDs.
-- Clear steps that reproduce the problem.
-- What you expected to happen and what happened instead.
-- The complete BugGrabber/BugSack stack trace, not only the first error line.
-- Whether the problem still occurs with every other addon disabled.
-- Screenshots or SavedVariables excerpts when they materially help reproduce the issue. Remove account names, character names, server addresses, and other private information first.
+## Credits and license
 
-One issue should normally describe one problem. If several guide steps fail for the same underlying reason, they may be reported together with every affected step listed.
+Thanks to **RestedXP** and its contributors for the original addon and guides; **AzerothCore** for server references; **Zygor Guides Viewer** contributors and [Zygor Guides Viewer Remaster](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) for converted WotLK route material; the bundled-library authors; and everyone testing and improving the project.
 
-### Feature suggestions
-
-Create a new issue and apply the **`enhancement`** label. Describe:
-
-- The problem or limitation the feature would address.
-- The proposed behavior from a player's point of view.
-- Where it should appear in the interface or settings, if applicable.
-- Any relevant 3.3.5a API or protected-action restrictions.
-- How it should interact with existing guides, settings, SavedVariables, and standalone operation.
-- Examples from newer RestedXP versions or other addons, with links and licensing information where relevant.
-
-Feature suggestions are evaluated against stock 3.3.5a client capabilities, AzerothCore compatibility, runtime safety, guide-data quality, maintenance cost, and the requirement that RXPGuides remain standalone.
-
-## Updating
-
-1. Open the [latest release](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/releases/latest) and download its `RXPGuides-<version>.zip` asset.
-2. Close World of Warcraft.
-3. Back up your `WTF` folder if you want an external copy of your settings and character progress.
-4. Remove the old `Interface\AddOns\RXPGuides` addon folder. This does not remove SavedVariables, which are stored under `WTF`.
-5. Extract the new ZIP directly into `Interface\AddOns\`.
-6. Verify that `Interface\AddOns\RXPGuides\RXPGuides.toc` exists, then start the game.
-
-For development changes, `/reload` is normally sufficient for Lua-only edits. Fully restart the client after changing TOC files, XML manifests, bundled libraries, fonts, or textures.
-
-## Guide Profiles
-
-### Bundled guides
-
-The addon includes validated 3.3.5a routes for Alliance and Horde through level 80.
-These routes include local fixes for legacy quest flow, prerequisites, coordinates,
-targets, map names, taxi destinations, route transitions, and unsupported modern content.
-
-Guide availability always depends on the current character's faction, race, class,
-level, XP rate, and route conditions.
-
-## Custom Guides
-
-The [custom-guides](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/tree/custom-guides) branch hosts community-contributed custom guide routes for farming, leveling, professions, dungeons, and more. These guides are not included in the main addon download — import them individually via the in-game `/rxp import` command.
-
-### How to use custom guides
-
-1. Browse the [custom-guides branch](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/tree/custom-guides)
-2. Open the `.lua` file for the guide you want and copy its entire content
-3. In-game, type `/rxp import`
-4. Paste the guide text into the import box
-5. The guide appears under the **CustomGuides** category in your Guide Hub
-
-### How to contribute a custom guide
-
-See the [custom-guides README](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/blob/custom-guides/CustomGuides/README.md) for directory structure, naming conventions, and PR guidelines. Guide authors should follow the [GUIDE_AUTHORING.md](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/blob/custom-guides/CustomGuides/GUIDE_AUTHORING.md) DSL reference when writing guides.
-
-## Notes
-
-- The supported target is **WotLK 3.3.5a (12340)**.
-- The backport is primarily validated on **AzerothCore**.
-- Other 3.3.5a cores may differ in quest prerequisites, localized names, events, taxi data, item metadata, or custom content.
-- The addon does not force friendly or hostile nameplates on.
-- Automatic taxi selection is deliberately skipped when a destination cannot be resolved uniquely.
-- Protected targeting, item use, equipment, and other secure actions remain subject to normal combat and hardware-input restrictions.
-- Static guide validation catches structural problems, but every route still benefits from in-game testing with BugGrabber enabled.
-
-## Known Issues
-
-- Passive target discovery is limited to visible nameplates, the current target, and mouseover units because the stock client cannot enumerate arbitrary rendered entities.
-- Localized or custom taxi-node names may require manual selection when no unique destination can be resolved.
-- Custom server quest chains can diverge from the AzerothCore data used for offline validation.
-- Converted guide routes may contain encounters that require manual vehicle, gossip, or scripted-event interaction.
-- Other map and waypoint addons can compete for arrows, pins, or fullscreen-map anchors.
-
-## Q&A
-
-**Is this the official current RestedXP addon?**
-
-No. This is a community-maintained compatibility backport targeting the original WotLK 3.3.5a client.
-
-**Where should I download it?**
-
-Use the versioned `RXPGuides-<version>.zip` asset from the [latest GitHub Release](https://github.com/PottedSalame/RestedXP_RXPGuides-WotLK_3.3.5a/releases/latest). Do not use the automatically generated source archives for a normal addon installation.
-
-**Does it require Questie, ElvUI, WeakAuras, or Details?**
-
-No. The 3.3.5a runtime and its required libraries are bundled. Other addons may be used alongside it, but they are not dependencies.
-
-**Does it include leveling routes through level 80?**
-
-Yes. The loaded guide set includes Alliance and Horde Classic, TBC, and WotLK progression, subject to the character and route filters described above.
-
-**Why does a fresh character not automatically select a guide?**
-
-The blank state prevents progress from another character being copied accidentally. Select a guide once and that character's guide and step will be restored afterward.
-
-**Can the addon automatically target every rendered creature?**
-
-No. The legacy API does not expose arbitrary rendered creatures as addressable units. Visible nameplates can be scanned passively; other targets require a secure player-activated targeting button or macro.
-
-**Why was a quest, flight, reward, or item not handled automatically?**
-
-The addon avoids guessing when the legacy client returns ambiguous or incomplete data. Manual interaction remains available, and a reproducible report with the guide step and server details can be used to improve the backport.
-
-## Development
-
-The first-party runtime is organized by compatibility, core, guide, UI, and
-feature domains. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for load-order rules,
-internal service contracts, extension guidance, upstream mapping, and the
-required validation suite.
-
-## Credits
-
-- **RestedXP** and its contributors for the original addon, guide engine, interface, and guide content on which this backport is based.
-- **AzerothCore** and its contributors for the open WotLK server and database references used during compatibility testing and offline validation.
-- **Zygor Guides Viewer** contributors and the [Zygor Guides Viewer Remaster](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) project for GPL-licensed WotLK route material converted into native RestedXP guide syntax.
-- The authors and maintainers of Ace3, LibStub, CallbackHandler, LibDataBroker, LibDBIcon, HereBeDragons, Astrolabe, LibCandyBar, LibDeflate, and the other bundled libraries.
-- Everyone who tests routes in-game and provides actionable guide names, step numbers, quest IDs, and error traces.
-
-## License
-
-The top-level project license is provided in [`LICENSE`](LICENSE).
-
-This is a mixed-license distribution. Bundled libraries, imported assets, upstream guide content, and converted WotLK guide files retain their respective licenses and attribution notices. The repository-level license does not replace those component-specific terms.
+See [LICENSE](LICENSE). This is a mixed-license distribution: bundled libraries, assets and guide content retain their own licenses and attribution notices.
