@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "source": "https://github.com/azerothcore/azerothcore-wotlk",
+  "scope": "Read-only compatibility facts; not complete route or survival certification.",
+  "files": {
+    "data/sql/base/db_world/creature_default_trainer.sql": "1464a890dc7129f6313c663cbb1815e27736f274b4c4c37c83640068ace8569b",
+    "data/sql/base/db_world/trainer_spell.sql": "18f3e7fcedcfc9bed4d47551d014c1b009dc359bb003e6415d3f59c66f5690b4",
+    "data/sql/base/db_world/creature_template.sql": "0066e4fd35b809986dd325487515087f5a95f4ffe50ea03846c8d8bf5196870a",
+    "data/sql/base/db_world/quest_template_addon.sql": "ca1081203af9dc5ab9b948d94652a66674d116ce387f629595ec38f89c4af5d2",
+    "data/sql/base/db_world/quest_template.sql": "5dc7e6c92ea6875a5fc68cf5d3e33150e86cda5819a11af0c59217b24c63a37f",
+    "data/sql/base/db_world/creature_queststarter.sql": "9c9598115adbc69d8c2d152e0fdb92fbbc727a42417837443d1cee5f3eee0a0a",
+    "data/sql/base/db_world/creature_questender.sql": "926b56956cba585f14b9fb2fa9ea5ba52096fc18182b9a3dab02fc9a0462bb72",
+    "data/sql/base/db_world/npc_vendor.sql": "75299694cb741ebc7b76f8f84c418236cc9d11b968ed028f9c6f49c9be0ebc80",
+    "src/server/game/Entities/Pet/Pet.cpp": "92c16f0733c2954d96ffb1a61b8702cbc81474b936591da1a130ff782c261ec8"
+  },
+  "training": [
+    {"trainer": 32, "spell": 688, "level": 1, "baseCostCopper": 100},
+    {"trainer": 32, "spell": 348, "level": 3, "baseCostCopper": 10},
+    {"trainer": 32, "spell": 172, "level": 4, "baseCostCopper": 100}
+  ],
+  "trainerCreatures": [3156, 2126, 459, 460, 15283],
+  "vendors": [
+    {"entry": 3158, "name": "Duokna", "npcFlags": 386},
+    {"entry": 2115, "name": "Joshua Kien", "npcFlags": 384},
+    {"entry": 152, "name": "Brother Danil", "npcFlags": 384},
+    {"entry": 836, "name": "Durnan Furcutter", "npcFlags": 4227},
+    {"entry": 15287, "name": "Shara Sunwing", "npcFlags": 384}
+  ],
+  "unavailableImpChains": [1485, 1499, 1470, 1598, 1599, 8344],
+  "retainedClassRewards": [3090, 3099, 3105, 3115, 8563, 10073],
+  "orcPrerequisite": {
+    "pickup": 792,
+    "rewardBeforePickup": 794,
+    "evidence": "792 NextQuestID=794; 1499 also leads to794 but is unavailable. Incoming NextQuestID participates in ObjectMgr prevQuests; do not infer no prerequisite from794 PrevQuestID=0."
+  },
+  "demonTraining": {
+    "itemsWithoutVendorRows": [16302, 16316, 16321, 16346, 16351, 16357],
+    "implementation": "Pet::InitLevelupSpellsForLevel",
+    "retainedQuestGrimoires": [1473, 9062]
+  }
+}

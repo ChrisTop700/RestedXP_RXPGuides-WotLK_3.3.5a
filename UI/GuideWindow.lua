@@ -2331,6 +2331,9 @@ local function ResolveGuideNext(guide)
 
         local nextGuide = addon.GetGuideTable(group, name)
         local active = nextGuide and addon.IsGuideActive(nextGuide)
+        if active and addon.hardcoreGuides then
+            active = addon.hardcoreGuides:AllowsTransition(guide, nextGuide)
+        end
         if active then
             local profile = addon.settings and addon.settings.profile or {}
             active = not (nextGuide.hardcore and not profile.hardcore or
@@ -2370,19 +2373,34 @@ local function FindPreviousGuide(requestedGuide)
     return matches[1] and matches[1].guide
 end
 
-function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail)
-    addon.loadNextStep = false
-    if addon.guideState.CancelAdvance then addon.guideState:CancelAdvance() end
-    if addon.questAutomation and addon.questAutomation.ResetForGuideChange then
-        addon.questAutomation:ResetForGuideChange()
+-- Resolve lazy metadata before consent or destination checkpoint writes.
+-- This only parses/caches the destination; it never activates its steps.
+function addon:PrepareGuideLoad335(guide)
+    if type(guide) ~= "table" then return end
+    local function eligible(candidate)
+        local farmCompatible = not candidate.farm or not addon.goldAssistant or
+            not addon.goldAssistant.IsGuideCompatible or
+            addon.goldAssistant:IsGuideCompatible(candidate)
+        return not candidate.internal and not candidate.disabled and
+            (candidate.empty or (addon.IsGuideActive(candidate) and farmCompatible and
+                ((candidate.farm and RXPCData.GA) or
+                 (not candidate.farm and not RXPCData.GA))))
     end
+    if not eligible(guide) then return end
+    local parsed = addon:FetchGuide(guide)
+    if not parsed or not parsed.steps or not eligible(parsed) then return end
+    if parsed.group ~= guide.group or parsed.name ~= guide.name or
+        (guide.key and parsed.key ~= guide.key) then return end
+    return parsed
+end
 
-    local savedStep = OnLoad and RXPCData and RXPCData.currentStep
-    local savedStepId = OnLoad and RXPCData and RXPCData.currentStepId
-    local savedFlags = OnLoad and RXPCData and {
-        stepSkip = RXPCData.stepSkip, completedWaypoints = RXPCData.completedWaypoints}
+function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
+    -- Even a rejected request supersedes an older confirmation. Read-only
+    -- PrepareGuideLoad335 calls intentionally do not invalidate consent.
+    if addon.hardcoreGuides and addon.hardcoreGuides.CancelPendingSelection then
+        addon.hardcoreGuides:CancelPendingSelection()
+    end
     local requestedGuide = guide
-
     local function LoadEmptyGuide()
         if requestedGuide ~= addon.emptyGuide and
             type(addon.emptyGuide) == "table" then
@@ -2390,37 +2408,16 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail)
         end
         addon.comms.PrettyDebug("Unable to load guide: no valid empty guide is registered")
     end
-
-    if type(guide) ~= "table" then
-        return LoadEmptyGuide()
-    end
-    local farmCompatible = true
-    if guide.farm and addon.goldAssistant and
-        addon.goldAssistant.IsGuideCompatible then
-        farmCompatible = addon.goldAssistant:IsGuideCompatible(guide)
-    end
-    if guide.internal or guide.disabled or
-        (not guide.empty and not addon.IsGuideActive(guide)) or
-        (not guide.empty and not farmCompatible) or
-        (not guide.empty and
-            ((guide.farm and not RXPCData.GA) or
-                (not guide.farm and RXPCData.GA))) then
-        return LoadEmptyGuide()
+    guide = addon:PrepareGuideLoad335(guide)
+    if not guide then return LoadEmptyGuide() end
+    if addon.hardcoreGuides and not addon.hardcoreGuides:BeforeLoad(
+        guide, OnLoad, loadSource, redirectTrail) then return end
+    addon.loadNextStep = false
+    if addon.guideState.CancelAdvance then addon.guideState:CancelAdvance() end
+    if addon.questAutomation and addon.questAutomation.ResetForGuideChange then
+        addon.questAutomation:ResetForGuideChange()
     end
 
-    guide = addon:FetchGuide(guide)
-    if not guide or not guide.steps then
-        return LoadEmptyGuide()
-    end
-    if OnLoad and addon.bundledGuideReplacements and
-        addon.bundledGuideReplacements[guide.key] then
-        -- The saved position belongs to an imported guide that used this
-        -- bundled guide's key. Its line-derived step ID and numeric fallback
-        -- cannot be mapped safely to a different route layout.
-        OnLoad = nil
-        savedStep = nil
-        savedStepId = nil
-    end
     if loadSource == "manual" then
         redirectTrail = redirectTrail or {}
         local guideKey = guide.key or fmt("%s|%s", guide.group or "",
@@ -2449,6 +2446,18 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail)
             return addon:LoadGuide(previousGuide, nil, "manual",
                                    redirectTrail)
         end
+    end
+    -- Only the successfully resolved destination may apply its checkpoint.
+    -- A prerequisite redirect above deliberately does not inherit selection.
+    if selection then OnLoad = addon.guideState:Apply(guide, selection.restart) end
+    local savedStep = OnLoad and RXPCData and RXPCData.currentStep
+    local savedStepId = OnLoad and RXPCData and RXPCData.currentStepId
+    local savedFlags = OnLoad and RXPCData and {
+        stepSkip = RXPCData.stepSkip, completedWaypoints = RXPCData.completedWaypoints}
+    if OnLoad and addon.bundledGuideReplacements and
+        addon.bundledGuideReplacements[guide.key] then
+        -- An imported copy with the same key is not the same source layout.
+        OnLoad, savedStep, savedStepId = nil, nil, nil
     end
     if addon.HideIntroUI and not guide.empty then
         addon.HideIntroUI()
@@ -2810,6 +2819,9 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail)
         addon.guideState:RecordLoaded(guide)
     end
     addon:ScheduleTask(RXPFrame.GenerateMenuTable)
+    -- Internal load receipt. Redirects return their actual destination; a
+    -- matching display name alone is never proof the requested load succeeded.
+    return addon.currentGuide
 end
 
 function addon:ReloadGuide(keepStep)
@@ -3280,6 +3292,9 @@ function RXPFrame:GenerateMenuTable(menu)
             displayGroup, displayGroupMeta =
                 addon.guideLocalization:RenderTitle(displayGroup)
         end
+        local family = addon.hardcoreGuides and addon.hardcoreGuides:GetFamily({
+            group = group:gsub("^[*+]", "")})
+        if family then displayGroup = family.label; displayGroupMeta = nil end
         local item = {
             text = displayGroup,
             notCheckable = 1,
@@ -3574,11 +3589,14 @@ function RXPFrame:GenerateMenuTable(menu)
         })
     end
 
-    if addon.game == "CLASSIC" then
+    if addon.game == "CLASSIC" or addon.gameVersion == 30300 then
         local guide = addon.currentGuide
         local hc = addon.settings.profile.hardcore
         local hctext
         local disabled = guide and (guide.hardcore and hc or guide.softcore and not hc)
+        if addon.gameVersion == 30300 and addon.hardcoreGuides then
+            disabled = addon.hardcoreGuides:IsToggleLocked()
+        end
         if hc then
             hctext = L("Deactivate Hardcore mode")
         else
@@ -3591,6 +3609,13 @@ function RXPFrame:GenerateMenuTable(menu)
             func = addon.HardcoreToggle,
             disabled = disabled and 1
         })
+        if addon.gameVersion == 30300 and addon.hardcoreGuides then
+            tinsert(menuList, {
+                text = L("Experimental Hardcore guides"),
+                notCheckable = 1,
+                func = function() addon.hardcoreGuides:OpenGuides() end
+            })
+        end
     end
 
     if RXPCData and RXPCData.GA then

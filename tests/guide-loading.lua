@@ -1,7 +1,7 @@
 -- Exercise the real source parser and embedded cache, isolated from the other
 -- mocked runtime tests. Quest/UI handlers are inert: this tests which authored
 -- instructions survive class/race filtering, not gameplay automation.
-return function(root)
+return function(root, fixturesOnly)
     local function newLoader(class, race, character, faction, level)
         local env = setmetatable({}, {__index = _G})
         env._G = env
@@ -32,6 +32,7 @@ return function(root)
         setfenv(chunk, env)("RXPGuides", addon)
         return addon, env
     end
+    if fixturesOnly then return newLoader end
 
     local file = assert(io.open(root .. "/Guides/RestedXP Horde 1-13 Troll-Orc.lua", "rb"))
     local source = file:read("*a")

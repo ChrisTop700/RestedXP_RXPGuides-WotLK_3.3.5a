@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "scope": "Targeted compatibility facts only; not complete route or gameplay certification.",
+  "source": {
+    "project": "AzerothCore",
+    "repository": "https://github.com/azerothcore/azerothcore-wotlk",
+    "method": "Read-only base SQL inspection",
+    "files": {
+      "data/sql/base/db_world/quest_template.sql": "5dc7e6c92ea6875a5fc68cf5d3e33150e86cda5819a11af0c59217b24c63a37f",
+      "data/sql/base/db_world/creature_template.sql": "0066e4fd35b809986dd325487515087f5a95f4ffe50ea03846c8d8bf5196870a",
+      "data/sql/base/db_world/smart_scripts.sql": "622b5865f171b0b7a4dd93ecba55afd673c393c579485c17f827b31cb6e47dd2",
+      "src/server/game/Entities/Pet/Pet.cpp": "92c16f0733c2954d96ffb1a61b8702cbc81474b936591da1a130ff782c261ec8"
+    }
+  },
+  "northshire": {
+    "quest": 33,
+    "item": 50432,
+    "count": 8,
+    "creatures": [
+      {"id": 299, "name": "Diseased Young Wolf", "lootEntry": 299},
+      {"id": 69, "name": "Diseased Timber Wolf", "lootEntry": 69}
+    ],
+    "lootSource": "data/sql/base/db_world/creature_loot_template.sql"
+  },
+  "riding": {
+    "creature": 3690,
+    "name": "Kar Stormsinger",
+    "trainer": 42,
+    "spell": 33388,
+    "requiredLevel": 20,
+    "costCopper": 40000,
+    "sources": [
+      "data/sql/base/db_world/creature_default_trainer.sql",
+      "data/sql/base/db_world/trainer_spell.sql"
+    ],
+    "mountPrice": "Use the actual merchant price separately; never assume the training budget buys a mount."
+  },
+  "gnomeregan": {
+    "sourceAreaId": 721,
+    "policy": "Manual optional-dungeon entry confirmation, not a global map alias."
+  },
+  "projectedXP": {
+    "unsupportedDirectives": ["xpto60", "xpto60hc"],
+    "policy": "Explicit manual forecast checkpoints; retain hand-ins and check actual level 60 afterward."
+  },
+  "petTraining": {
+    "implementation": "Pet::InitLevelupSpellsForLevel",
+    "policy": "Family/default pet ability ranks are learned by pet level. Remove temporary tame-to-learn and pet trainer rank routines, not player class training or permanent first-pet acquisition.",
+    "retainedQuests": [9673, 9675],
+    "retainedTameSpell": 1515
+  },
+  "bloodElfRacial": {
+    "quest": 8346,
+    "objectiveIndex": 1,
+    "requiredCredit": 1,
+    "creditEntry": 15468,
+    "creature": 15274,
+    "creatureName": "Mana Wyrm",
+    "racialSpells": [28730, 25046],
+    "creditSpell": 61314,
+    "policy": "Wait for the live quest objective, not a cast event alone. Preserve valid sliver rewards and the authored turn-in circuit."
+  }
+}

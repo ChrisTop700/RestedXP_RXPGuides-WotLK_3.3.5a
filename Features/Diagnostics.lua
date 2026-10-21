@@ -262,8 +262,9 @@ function diagnostics:OpenPrerequisiteGuide()
     addon.comms:ConfirmChoice("RXP_OPEN_PREREQ_GUIDE",
             format(L("Open the guide containing prerequisite quest %d?"), questId),
         function(data)
-            addon.guideState:Load(data.guide, false, "manual")
-            if data.step then addon.GoToStep(data.step) end
+            addon.guideState:Load(data.guide, false, "manual", function()
+                if data.step then addon.GoToStep(data.step) end
+            end)
         end, {guide = guide, step = step})
 end
 

@@ -406,6 +406,7 @@ end
 
 local settingsDBDefaults = {
     profile = {
+        hardcore = false,
         enableTracker = true,
         enableLevelUpAnnounceSolo = true,
         enableLevelUpAnnounceGroup = true,
@@ -2581,15 +2582,18 @@ function addon.settings:CreateAceOptionsPanel()
                     hardcore = {
                         name = L("Hardcore mode"),
                         desc = L(
-                            "Adjust the leveling routes to the deathless ruleset"),
+                            "Experimental deathless guide selection. This does not enforce server rules or guarantee survival."),
                         type = "toggle",
                         width = optionsWidth,
                         order = 2.4,
                         set = function(info, value)
+                            if addon.gameVersion == 30300 and addon.hardcoreGuides then
+                                return addon.hardcoreGuides:SetEnabled(value)
+                            end
                             SetProfileOption(info, value)
                             addon.RenderFrame()
                         end,
-                        hidden = addon.game ~= "CLASSIC"
+                        hidden = addon.game ~= "CLASSIC" and addon.gameVersion ~= 30300
                     },
                     season = {
                         hidden = addon.game ~= "CLASSIC",

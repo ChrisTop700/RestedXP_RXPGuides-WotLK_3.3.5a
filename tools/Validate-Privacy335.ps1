@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $safeRoot = $root.Replace('\', '/')
 $extensions = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-foreach ($extension in @('.lua','.md','.ps1','.yml','.yaml','.xml','.toc','.txt','.json')) {
+foreach ($extension in @('.lua','.md','.ps1','.py','.yml','.yaml','.xml','.toc','.txt','.json','.tsv')) {
     [void]$extensions.Add($extension)
 }
 $patterns = @(

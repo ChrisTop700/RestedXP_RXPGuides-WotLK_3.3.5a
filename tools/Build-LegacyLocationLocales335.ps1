@@ -7,6 +7,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Hardcore-Locations335.ps1')
+$hardcoreLocations = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'data/Hardcore-Locations335.json')) | ConvertFrom-Json
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 if (-not $OutputPath) {
     $OutputPath = Join-Path $repoRoot 'Compat\LocationLocales335.lua'
@@ -108,6 +110,13 @@ if ($missingAreaIDs.Count -gt 0) {
         (($missingAreaIDs | Sort-Object) -join ', '))
 }
 
+# Published legacy facts take precedence over later renamed map entries.
+# Keep them even when regenerating before the experimental manifest is enabled.
+foreach ($area in $hardcoreLocations.areas) {
+    $areaNames[[int]$area.id] = [string]$area.name
+    Add-RequiredName ([string]$area.name)
+}
+
 $locales = @('deDE', 'esES', 'frFR', 'koKR', 'ruRU', 'zhCN', 'zhTW')
 $builder = [Text.StringBuilder]::new()
 [void]$builder.AppendLine('--[[-----------------------------------------------------------------------')
@@ -138,7 +147,7 @@ foreach ($locale in $locales) {
         throw "Missing LibBabble locale file: $localePath"
     }
     $source = [IO.File]::ReadAllText($localePath)
-    $values = @{}
+    $values = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
     foreach ($match in [regex]::Matches(
         $source,
         '\["(?<key>(?:\\.|[^"])*)"\]\s*=\s*"(?<value>(?:\\.|[^"])*)"')) {
@@ -165,12 +174,10 @@ foreach ($locale in $locales) {
         if (-not $localeBlock.Success) {
             throw "Legacy LibBabble-SubZone has no $locale translation block."
         }
-        foreach ($match in [regex]::Matches(
-            $localeBlock.Groups['body'].Value,
-            '\["(?<key>(?:\\.|[^"])*)"\]\s*=\s*"(?<value>(?:\\.|[^"])*)"')) {
-            $key = $match.Groups['key'].Value -replace '\\"', '"'
+        $legacyPairs = Read-HardcoreLuaPairs335 $localeBlock.Groups['body'].Value
+        foreach ($key in $legacyPairs.Keys) {
             if ($required.Contains($key)) {
-                $values[$key] = $match.Groups['value'].Value
+                $values[$key] = $legacyPairs[$key]
             }
         }
     }
@@ -193,14 +200,15 @@ foreach ($locale in $locales) {
         if (-not $localeBlock.Success) {
             throw "Legacy LibBabble-Zone has no $locale translation block."
         }
-        foreach ($match in [regex]::Matches(
-            $localeBlock.Groups['body'].Value,
-            '\["(?<key>(?:\\.|[^"])*)"\]\s*=\s*"(?<value>(?:\\.|[^"])*)"')) {
-            $key = $match.Groups['key'].Value -replace '\\"', '"'
+        $legacyPairs = Read-HardcoreLuaPairs335 $localeBlock.Groups['body'].Value
+        foreach ($key in $legacyPairs.Keys) {
             if ($required.Contains($key)) {
-                $values[$key] = $match.Groups['value'].Value
+                $values[$key] = $legacyPairs[$key]
             }
         }
+    }
+    foreach ($area in $hardcoreLocations.areas) {
+        $values[[string]$area.name] = [string]$area.locales.$locale
     }
     [void]$builder.AppendLine(('    ["{0}"] = {{' -f $locale))
     foreach ($key in ($values.Keys | Sort-Object)) {
@@ -229,6 +237,6 @@ foreach ($locale in $locales) {
 
 $encoding = [Text.UTF8Encoding]::new($false)
 [IO.File]::WriteAllText([IO.Path]::GetFullPath($OutputPath),
-    $builder.ToString(), $encoding)
+    (Merge-HardcoreLocations335 $builder.ToString() $hardcoreLocations), $encoding)
 Write-Output ("Generated {0} translations for {1} required names." -f
     $generatedCount, $required.Count)

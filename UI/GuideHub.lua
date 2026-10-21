@@ -53,6 +53,8 @@ end
 
 local function DisplayGroup(group)
     local source = tostring(group or ""):gsub("^[*+]", "")
+    local family = addon.hardcoreGuides and addon.hardcoreGuides:GetFamily({group = source})
+    if family then return family.label end
     if addon.guideLocalization then
         return addon.guideLocalization:RenderGroup(source)
     end
@@ -153,6 +155,9 @@ function hub:GetFilteredGuides()
             SearchText(entry.canonicalName):find(search, 1, true) or
             SearchText(entry.canonicalGroup):find(search, 1, true)
         local guide = entry.guide
+        local family = addon.hardcoreGuides and addon.hardcoreGuides:GetFamily(guide)
+        local familyMatch = not self.hardcoreFamily or
+            (family and family.id == self.hardcoreFamily)
         local condition = type(guide.enabledFor) == "string" and
                               guide.enabledFor or ""
         local factionAllowed = ConditionAllows(condition, addon.player.faction,
@@ -169,7 +174,7 @@ function hub:GetFilteredGuides()
         local availabilityMatch = self.availabilityFilter == "all" or
             (self.availabilityFilter == "available" and entry.active) or
             (self.availabilityFilter == "unavailable" and not entry.active)
-        if textMatch and factionMatch and classMatch and levelMatch and
+        if familyMatch and textMatch and factionMatch and classMatch and levelMatch and
             availabilityMatch and (not favoritesOnly or favorite) and
             (not recentOnly or recent[entry.key]) then
             entry.favorite = favorite
@@ -183,6 +188,25 @@ function hub:GetFilteredGuides()
         end)
     end
     return result
+end
+
+-- This is a view filter only: no mode, guide, checkpoint or saved filter changes.
+function hub:OpenHardcoreGuides(familyId)
+    local frame = self:CreateFrame()
+    self.hardcoreFamily = familyId or "tbc"
+    self.favoritesOnly, self.recentOnly = false, false
+    self.factionFilter, self.classFilter = "current", "current"
+    self.levelFilter, self.availabilityFilter = "all", "available"
+    self:Select(nil)
+    if frame.search then frame.search:SetText("") end
+    if frame.favorites then frame.favorites:SetText(L("Favorites")) end
+    if frame.recent then frame.recent:SetText(L("Recent")) end
+    if frame.factionFilter then frame.factionFilter:SetText(L("Faction: Current")) end
+    if frame.classFilter then frame.classFilter:SetText(L("Class: Current")) end
+    if frame.levelFilter then frame.levelFilter:SetText(L("Level: All")) end
+    if frame.availabilityFilter then frame.availabilityFilter:SetText(L("Availability: ") .. L("Available")) end
+    frame:Show()
+    self:Refresh()
 end
 
 function hub:Select(entry)
@@ -235,8 +259,9 @@ function hub:ChooseStep()
             if not guide or not guide.steps then return end
             requested = math.max(1, math.min(#guide.steps,
                                              math.floor(requested)))
-            addon.guideState:Load(guide, true, "manual")
-            addon.GoToStep(requested)
+            addon.guideState:Load(guide, true, "manual", function()
+                addon.GoToStep(requested)
+            end)
         end
     }
     StaticPopup_Show("RXP_GUIDE_HUB_STEP", self.selected.name, nil,
@@ -323,6 +348,7 @@ function hub:CreateFrame()
     close:SetPoint("TOPRIGHT", -5, -5)
 
     local search = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    frame.search = search
     search:SetSize(260, 24)
     search:SetPoint("TOPLEFT", 24, -50)
     search:SetAutoFocus(false)
@@ -336,6 +362,7 @@ function hub:CreateFrame()
     end)
 
     local favorites = CreateButton(frame, L("Favorites"), 105)
+    frame.favorites = favorites
     favorites:SetPoint("LEFT", search, "RIGHT", 12, 0)
     favorites:SetScript("OnClick", function()
         hub.favoritesOnly = not hub.favoritesOnly
@@ -343,11 +370,26 @@ function hub:CreateFrame()
         hub:Refresh()
     end)
     local recent = CreateButton(frame, L("Recent"), 90)
+    frame.recent = recent
     recent:SetPoint("LEFT", favorites, "RIGHT", 8, 0)
     recent:SetScript("OnClick", function()
         hub.recentOnly = not hub.recentOnly
         recent:SetText(hub.recentOnly and L("All") or L("Recent"))
         hub:Refresh()
+    end)
+    local familyButton = CreateButton(frame, L("Hardcore"), 82)
+    familyButton:SetPoint("LEFT", recent, "RIGHT", 8, 0)
+    local familyMenu = CreateFrame("Frame", "RXPGuideHubFamilyMenu", frame, "UIDropDownMenuTemplate")
+    familyButton:SetScript("OnClick", function()
+        local menu = {}
+        for _, family in ipairs(addon.hardcoreGuides and addon.hardcoreGuides.families or {}) do
+            local id = family.id
+            menu[#menu + 1] = {text = family.label, checked = hub.hardcoreFamily == id,
+                func = function() hub:OpenHardcoreGuides(id) end}
+        end
+        menu[#menu + 1] = {text = L("All guides"), checked = not hub.hardcoreFamily,
+            func = function() hub.hardcoreFamily = nil; hub:Select(nil); hub:Refresh() end}
+        _G.EasyMenu(menu, familyMenu, familyButton, 0, 0, "MENU")
     end)
 
     local function FilterButton(text, width, relative, update)
@@ -402,6 +444,8 @@ function hub:CreateFrame()
         end)
     availabilityFilter:ClearAllPoints()
     availabilityFilter:SetPoint("LEFT", levelFilter, "RIGHT", 7, 0)
+    frame.factionFilter, frame.classFilter = factionFilter, classFilter
+    frame.levelFilter, frame.availabilityFilter = levelFilter, availabilityFilter
 
     frame.count = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.count:SetPoint("TOPRIGHT", -26, -113)
@@ -482,9 +526,14 @@ function hub:CreateFrame()
     frame.restart:SetPoint("LEFT", frame.continue, "RIGHT", 8, 0)
     frame.restart:SetScript("OnClick", function()
         if not hub.selected then return end
+        local entry = hub.selected
         addon.comms:ConfirmChoice("RXP_GUIDE_HUB_RESTART",
-            "Restart " .. hub.selected.name .. " from step 1?",
-            function() hub:LoadSelected(true) end)
+            "Restart " .. entry.name .. " from step 1?",
+            function()
+                if hub.selected == entry and entry.active then
+                    addon.guideState:Load(entry.guide, true, "manual")
+                end
+            end)
     end)
     frame.chooseStep = CreateButton(frame, "Choose Step", 115)
     frame.chooseStep:SetPoint("LEFT", frame.restart, "RIGHT", 8, 0)

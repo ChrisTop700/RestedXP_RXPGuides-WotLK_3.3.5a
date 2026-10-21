@@ -1222,6 +1222,7 @@ function addon.GetCorpseWorldPosition()
 end
 
 local function IsDeathSkip()
+    if addon.gameVersion == 30300 and addon.settings.profile.hardcore then return false end
     local activeSteps = addon.RXPFrame and addon.RXPFrame.activeSteps or {}
     for _, step in pairs(activeSteps) do
         if step.elements then
@@ -1235,6 +1236,7 @@ local function IsDeathSkip()
 end
 
 local function ShouldFollowGuideWhileGhost()
+    if addon.gameVersion == 30300 and addon.settings.profile.hardcore then return false end
     local guide = addon.currentGuide
     local currentStep = guide and guide.steps and
                             guide.steps[RXPCData.currentStep]

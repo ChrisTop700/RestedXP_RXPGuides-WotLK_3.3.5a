@@ -86,7 +86,7 @@ end
 local GetAddOnMetadata = _G.GetAddOnMetadata
 addon.release = GetAddOnMetadata(addonName, "Version")
 addon.title = GetAddOnMetadata(addonName, "Title")
-local cacheVersion = 35
+local cacheVersion = 36
 local L = addon.locale.Get
 
 if string.match(addon.release, 'project') then
@@ -2457,7 +2457,8 @@ function addon:OnInitialize()
 
     RXPCData.completedWaypoints = RXPCData.completedWaypoints or {}
     addon.settings.profile.hardcore =
-        addon.game == "CLASSIC" and addon.settings.profile.hardcore
+        (addon.game == "CLASSIC" or addon.gameVersion == 30300) and
+        addon.settings.profile.hardcore == true
     RXPCData.stepSkip = RXPCData.stepSkip or {}
     if not RXPCData.flightPaths or UnitLevel("player") <= 6 then
         RXPCData.flightPaths = {}
@@ -3316,6 +3317,9 @@ function addon.tickers.CycleThirty()
 end
 
 function addon.HardcoreToggle()
+    if addon.gameVersion == 30300 and addon.hardcoreGuides then
+        return addon.hardcoreGuides:SetEnabled(not addon.hardcoreGuides:IsEnabled())
+    end
     local guide = addon.currentGuide
     local hc = addon.settings.profile.hardcore
 

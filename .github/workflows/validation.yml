@@ -80,6 +80,22 @@ jobs:
         shell: pwsh
         run: |
           ./tools/Validate-QuestFlow335.ps1
+          ./tests/hardcore-upstream.ps1
+          ./tests/hardcore-coordinates.ps1
+          ./tests/hardcore-upstream-compatibility.ps1
+          ./tests/hardcore-pets.ps1
+          ./tests/hardcore-racial.ps1
+          ./tests/hardcore-warlock.ps1
+          ./tests/hardcore-travel.ps1
+          ./tests/hardcore-ferries.ps1
+          ./tests/hardcore-demons.ps1
+          ./tests/hardcore-english-names.ps1
+          ./tests/hardcore-publication-preflight.ps1
+          ./tests/hardcore-locations.ps1
+          python3 ./tests/hardcore_quest_facts.py
+          if ($LASTEXITCODE -ne 0) { throw 'Hardcore quest facts failed.' }
+          ./tools/Validate-HardcorePublication335.ps1
+          ./tests/hardcore-publication.ps1
           ./tools/Validate-Talents335.ps1
           ./tools/Validate-Roadmap335.ps1
           ./tools/Validate-Privacy335.ps1

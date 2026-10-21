@@ -458,11 +458,31 @@ function guideState:Apply(guide, restart)
     return checkpoint ~= nil
 end
 
-function guideState:Load(guide, restart, source)
+function guideState:Load(guide, restart, source, onLoaded, canLoad)
+    if addon.hardcoreGuides and addon.hardcoreGuides.CancelPendingSelection then
+        addon.hardcoreGuides:CancelPendingSelection()
+    end
     if type(guide) ~= "table" or guide.empty then return end
+    if guide.disabled or guide.internal or
+        (addon.IsGuideActive and not addon.IsGuideActive(guide)) then return end
+    if canLoad and not canLoad() then return end
+    if addon.PrepareGuideLoad335 then
+        guide = addon:PrepareGuideLoad335(guide)
+        if not guide then return end
+    end
+    if addon.hardcoreGuides and not addon.hardcoreGuides:BeforeLoad(
+        guide, false, source, nil, function()
+            self:Load(guide, restart, source, onLoaded, canLoad)
+        end, canLoad) then return end
     self:SaveCurrent()
-    local hasCheckpoint = self:Apply(guide, restart)
-    return addon:LoadGuide(guide, hasCheckpoint, source or "manual")
+    local result = addon:LoadGuide(guide, nil, source or "manual", nil,
+        {restart = restart})
+    local current = addon.currentGuide
+    if onLoaded and result and result == current and current.group == guide.group and
+        current.name == guide.name and current.key == guide.key then
+        onLoaded(current)
+    end
+    return result
 end
 
 function guideState:RecordLoaded(guide)

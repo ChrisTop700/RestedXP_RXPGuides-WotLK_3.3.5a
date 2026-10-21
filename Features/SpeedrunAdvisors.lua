@@ -937,8 +937,9 @@ function deathwarp:Scan()
     local perfLabel = "speedrun deathwarp scan"
     local perf = addon.PerfBegin and addon.PerfBegin(perfLabel)
     local report = {generated = GetTime(), options = {}}
-    if addon.speedrunRules and addon.speedrunRules.CurrentId and
-        addon.speedrunRules:CurrentId() == "solo-deathless" then
+    if (addon.gameVersion == 30300 and addon.settings.profile.hardcore) or
+        (addon.speedrunRules and addon.speedrunRules.CurrentId and
+        addon.speedrunRules:CurrentId() == "solo-deathless") then
         report.status = "deathless"
         self.report = report
         FinishPerf(perfLabel, perf)

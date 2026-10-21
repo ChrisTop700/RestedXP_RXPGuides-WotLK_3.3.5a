@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "source": "https://github.com/azerothcore/azerothcore-wotlk/blob/master/data/sql/base/db_world/transports.sql",
+  "sourcePath": "data/sql/base/db_world/transports.sql",
+  "sourceSha256": "16d11e8f47d2418ed3ad994873b67fa308457859011c0e8dcf8094f6e66501dc",
+  "scope": "Verified ferry endpoints only. Does not certify route safety, walking times or player flight knowledge.",
+  "ferries": [
+    {"entry": 176310, "name": "The Bravery", "endpoints": ["Auberdine", "Stormwind Harbor"]},
+    {"entry": 176244, "name": "The Moonspray", "endpoints": ["Auberdine", "Rut'theran Village"]},
+    {"entry": 176231, "name": "The Lady Mehley", "endpoints": ["Menethil Harbor", "Theramore Isle"]},
+    {"entry": 181646, "name": "Elune's Blessing", "endpoints": ["Auberdine", "Valaar's Berth"]}
+  ]
+}

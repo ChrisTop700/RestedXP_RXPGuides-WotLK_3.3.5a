@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "source": "https://github.com/azerothcore/azerothcore-wotlk/tree/93ab9ad63e7e75cc5f41dd7955a95d58776d3752/data/sql/base/db_world",
+  "sourceRevision": "93ab9ad63e7e75cc5f41dd7955a95d58776d3752",
+  "questTemplateSha256": "5dc7e6c92ea6875a5fc68cf5d3e33150e86cda5819a11af0c59217b24c63a37f",
+  "itemTemplateSha256": "bd4859be01946ca1521f7896f558f665e1e1d98890757a3df30e717b62768cc6",
+  "presentQuests": [1716, 1738, 1739],
+  "absentQuests": [65602, 65603],
+  "absentItems": [190186, 190307, 190308],
+  "attribution": "Minimal presence/absence facts from AzerothCore world quest_template and item_template (AGPL-3.0 source).",
+  "scope": "WotLK Succubus chain retained; modern Classic Incubus branch excluded. No claim about custom server modules."
+}

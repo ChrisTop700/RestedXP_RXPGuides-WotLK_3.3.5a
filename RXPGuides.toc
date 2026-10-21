@@ -100,6 +100,7 @@ Guide\Registry.lua
 Guide\Parser.lua
 Guide\Conditions.lua
 Guide\State.lua
+Guide\Hardcore.lua
 
 # Staged 3.3.5 feature-roadmap foundation and stock legacy interfaces.
 Features\Roadmap.lua

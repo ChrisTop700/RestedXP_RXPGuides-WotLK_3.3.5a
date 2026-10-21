@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "status": "requires-production-regressions",
+  "cases": [
+    {"family":"classic","name":"6-13 Tauren","label":"Stolensupplies","kind":"manual-emergency-binding","reason":"Only the exact manual Skull/Glue binding reminder uses this reference. Its next-step retirement must leave both Encroachment objectives and their rewards untouched."},
+    {"family":"classic","name":"54-56 Un'Goro Crater","label":"EnterST","kind":"sunken-temple-recruitment","reason":"Only the Sunken Temple group-finding reminder uses this reference in this chapter. The next Ratchet flight retires the reminder, not the following chapter's dungeon entry or quest actions; grouping remains manual."},
+    {"family":"classic","name":"20-21 Darkshore/Ashenvale","label":"TheryluneE","kind":"hearth-wait","reason":"The surviving hearth instruction remains blocking until hearth completion; missing timing metadata cannot turn it into a sticky skip."},
+    {"family":"classic","name":"38-39 Swamp of Sorrows","label":"SWbank","kind":"hearth-wait","reason":"The surviving hearth instruction remains blocking; class-filtered bank timing metadata does not change its required action."},
+    {"family":"classic","name":"6-13 Orc/Troll","label":"Toolboxes","kind":"optional-equipment","reason":"Only optional equipment reminders use this obsolete timing anchor; retirement cannot complete or hide a required quest instruction."},
+    {"family":"classic","name":"6-13 Undead","label":"Toolboxes","kind":"optional-equipment","reason":"Only optional equipment reminders use this obsolete timing anchor; preserve the upstream reminder lifetime and all required actions."},
+    {"family":"classic","name":"6-13 Tauren","label":"ThunderhornCleanse","kind":"optional-equipment","reason":"In manually selected non-Tauren branches the absent destination affects optional equipment reminders only, not required actions."},
+    {"family":"tbc","name":"1-12 Azuremyst Isle","label":"SGrain","kind":"optional-tracking","reason":"This is an explicitly optional Find Minerals reminder, not a quest objective or prerequisite."},
+    {"family":"tbc","name":"14-20 Bloodmyst Isle","label":"DarkshoreEnd","kind":"optional-equipment","reason":"The stale reference belongs only to an optional Longsword equip reminder; no quest or travel action is waived."},
+    {"family":"tbc","name":"1-6 Tirisfal Glades","label":"Claws","kind":"optional-equipment","reason":"Only optional equipment reminders use the obsolete anchor; next-step retirement leaves required actions unchanged."},
+    {"family":"tbc","name":"6-12 Mulgore","label":"ThunderhornCleanse","kind":"optional-equipment","reason":"The missing destination in non-Tauren manual selections affects only optional equipment reminders."},
+    {"family":"tbc","name":"6-12 Mulgore","label":"MulgoreEnd","kind":"optional-equipment","reason":"Only optional staff and mace equip reminders use this missing timing anchor; no required actions depend on it."},
+    {"family":"tbc","name":"10-12 Eversong Woods","label":"HunterTrain","kind":"optional-equipment","reason":"The surviving instructions are optional bow equip reminders, not removed pet training or required player training."},
+    {"family":"tbc","name":"14-16 The Barrens","label":"FoodandWater2","kind":"optional-equipment","reason":"Only an optional bow equip reminder references the absent destination; required supply or quest steps are unaffected."},
+    {"family":"tbc","name":"47-49 Tanaris","label":"FlyDWM2","kind":"hearth-wait","reason":"The guarded hearth remains blocking regardless of the missing flight timing label; preserve dungeon and cooldown predicates."},
+    {"family":"curated","name":"47-49 Tanaris","label":"FlyDWM2","kind":"hearth-wait","reason":"The guarded hearth remains blocking regardless of the missing flight timing label; no curated routing is changed."}
+  ]
+}

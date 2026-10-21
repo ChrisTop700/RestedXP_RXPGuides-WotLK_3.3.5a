@@ -133,14 +133,18 @@ function catchUp:Preview(guide)
     table.insert(lines, "Apply this proposed step?")
     addon.comms:ConfirmChoice("RXP_CATCHUP_CONFIRM",
         table.concat(lines, "\n"), function(data)
-            if data.guide ~= addon.currentGuide then
-                addon.guideState:Load(data.guide, true, "manual")
+            local function apply()
+                addon.GoToStep(data.step)
+                if addon.diagnostics then
+                    addon.diagnostics:Record("CATCHUP_APPLIED", {
+                        step = data.step, confidence = data.confidence
+                    })
+                end
             end
-            addon.GoToStep(data.step)
-            if addon.diagnostics then
-                addon.diagnostics:Record("CATCHUP_APPLIED", {
-                    step = data.step, confidence = data.confidence
-                })
+            if data.guide ~= addon.currentGuide then
+                addon.guideState:Load(data.guide, true, "manual", apply)
+            else
+                apply()
             end
         end, proposal)
 end

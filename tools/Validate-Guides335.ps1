@@ -1,10 +1,13 @@
 param(
     [string]$ManifestPath = (Join-Path $PSScriptRoot '..\GuideList_335.xml'),
     [string]$QuestDbPath = (Join-Path $PSScriptRoot '..\..\ZygorGuidesViewerRM\ZygorQuestDB.lua'),
-    [int]$MaxErrors = 200
+    [int]$MaxErrors = 200,
+    [string]$SurfacePath = (Join-Path $PSScriptRoot '..\tests\runtime-surface.json'),
+    [string]$HardcoreQuestFactsPath = (Join-Path $PSScriptRoot 'data/Hardcore-QuestFacts335.json')
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Guide-Families335.ps1')
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $errors = New-Object 'Collections.Generic.List[string]'
 $warnings = New-Object 'Collections.Generic.List[string]'
@@ -217,14 +220,23 @@ foreach ($line in [IO.File]::ReadLines((Join-Path $root 'DB\wotlk\db.lua'))) {
 $areaIds = @{}
 $areaText = [IO.File]::ReadAllText((Join-Path $root 'libs\HBD335\HereBeDragons-335.lua'))
 $areaBlock = [regex]::Match($areaText, '(?s)local legacyAreaNames\s*=\s*\{(.*?)\n\}')
-foreach ($match in [regex]::Matches($areaBlock.Groups[1].Value, '\[(\d+)\]\s*=\s*"')) {
-    $areaIds[[int]$match.Groups[1].Value] = $true
+$fallbackAreaText = [IO.File]::ReadAllText((Join-Path $root 'Compat/LocationLocales335.lua'))
+$fallbackAreaBlock = [regex]::Match($fallbackAreaText, '(?s)addon.LegacyAreaNames335\s*=\s*\{(.*?)\n\}')
+if (-not $areaBlock.Success -or -not $fallbackAreaBlock.Success) { throw 'Runtime area tables missing.' }
+foreach ($block in @($areaBlock, $fallbackAreaBlock)) {
+    foreach ($match in [regex]::Matches($block.Groups[1].Value, '\[(\d+)\]\s*=\s*"([^"]+)"')) {
+        $id = [int]$match.Groups[1].Value
+        $areaName = $match.Groups[2].Value
+        if ($areaIds.ContainsKey($id) -and $areaIds[$id] -cne $areaName) {
+            Add-Error "Conflicting runtime area name for ID $id"
+        }
+        $areaIds[$id] = $areaName
+    }
 }
 
 # The runtime surface is the authoritative directive and guide-key contract.
 # Reading it here also captures handlers owned by database modules, which are
 # intentionally outside Guide/Directives/Handlers.lua after the refactor.
-$surfacePath = Join-Path $root 'tests/runtime-surface.json'
 $surface = [IO.File]::ReadAllText($surfacePath) | ConvertFrom-Json
 $functionNames = @{}
 foreach ($name in @($surface.directives) + @($surface.directiveAliases)) {
@@ -245,6 +257,9 @@ foreach ($name in @(
 
 $questIds = @{}
 $questNames = @{}
+$hardcoreQuestIds = @{}
+$hardcoreQuestNames = @{}
+$hardcoreFactsLoaded = $false
 if ([IO.File]::Exists($QuestDbPath)) {
     foreach ($line in [IO.File]::ReadLines([IO.Path]::GetFullPath($QuestDbPath))) {
         if ($line -match '^\s*\[(\d+)\]\s*=') {
@@ -313,7 +328,31 @@ foreach ($file in $files) {
         $name = $headers['name']
         $subgroup = $headers['subgroup']
         if (-not $groupRaw -or -not $name) { Add-Error "$relative contains a guide without #group or #name"; continue }
-        $isOriginalSnapshot = $groupRaw.TrimStart('+', '*').StartsWith('Original Guides - ')
+        $isOriginalSnapshot = Test-OriginalGuideSnapshot335 $groupRaw
+        # Adapted Hardcore content always uses committed evidence, never a
+        # neighboring addon or a running database. Normal checks are unchanged.
+        if ($groupRaw -match 'RestedXP Hardcore') {
+            if (-not $hardcoreFactsLoaded) {
+                if (-not [IO.File]::Exists($HardcoreQuestFactsPath)) { throw 'Missing committed Hardcore quest facts.' }
+                $facts = [IO.File]::ReadAllText([IO.Path]::GetFullPath($HardcoreQuestFactsPath)) | ConvertFrom-Json
+                if ($facts.schemaVersion -ne 1 -or $facts.sourceRevision -cnotmatch '^[a-f0-9]{40}$' -or
+                    $facts.sources.quest_template -cnotmatch '^[a-f0-9]{64}$' -or -not $facts.quests.Count) {
+                    throw 'Malformed Hardcore quest facts.'
+                }
+                foreach ($fact in $facts.quests) {
+                    $id = [int]$fact.id
+                    if ($id -le 0 -or $hardcoreQuestIds.ContainsKey($id) -or -not $fact.name) { throw 'Invalid Hardcore quest fact.' }
+                    $hardcoreQuestIds[$id] = $true
+                    $hardcoreQuestNames[$id] = [string]$fact.name
+                }
+                $hardcoreFactsLoaded = $true
+            }
+            $activeQuestIds = $hardcoreQuestIds
+            $activeQuestNames = $hardcoreQuestNames
+        } else {
+            $activeQuestIds = $questIds
+            $activeQuestNames = $questNames
+        }
         $group = Normalize-Group $groupRaw
         $xprate = $headers['xprate']
         $topCondition = ($topConditionPattern.Match($metadata).Groups[1].Value).Trim()
@@ -506,9 +545,9 @@ foreach ($file in $files) {
                 if (-not $isOriginalSnapshot -and $directive -eq 'accept' -and $line -match '^\.accept\s+(\d+)\b.*?>>\s*(.*?)(?:\s*<<.*)?(?:\s*--.*)?\s*$') {
                     $acceptQuestId = [int]$Matches[1]
                     $authoredTitle = ($Matches[2].Trim() -replace '^Accept\s+', '')
-                    if ($questNames.ContainsKey($acceptQuestId) -and
-                        $authoredTitle -cne $questNames[$acceptQuestId]) {
-                        Add-Error "$relative`:$lineNumber .accept title '$authoredTitle' does not match quest $acceptQuestId ('$($questNames[$acceptQuestId])')"
+                    if ($activeQuestNames.ContainsKey($acceptQuestId) -and
+                        $authoredTitle -cne $activeQuestNames[$acceptQuestId]) {
+                        Add-Error "$relative`:$lineNumber .accept title '$authoredTitle' does not match quest $acceptQuestId ('$($activeQuestNames[$acceptQuestId])')"
                     }
                 }
                 if ($coordinateDirectives.ContainsKey($directive)) {
@@ -604,7 +643,7 @@ foreach ($file in $files) {
                         Add-Error "$relative`:$lineNumber malformed .loop route"
                     }
                 }
-                if (-not $isOriginalSnapshot -and $questIds.Count -gt 0 -and $line -match '^\.(accept|turnin|complete|abandon|isOnQuest|isNotOnQuest|isQuestAvailable|isQuestComplete|isQuestNotComplete|isQuestTurnedIn|skipOnQuest|acceptmultiple)\s+([^>]+)') {
+                if (-not $isOriginalSnapshot -and $activeQuestIds.Count -gt 0 -and $line -match '^\.(accept|turnin|complete|abandon|isOnQuest|isNotOnQuest|isQuestAvailable|isQuestComplete|isQuestNotComplete|isQuestTurnedIn|skipOnQuest|acceptmultiple)\s+([^>]+)') {
                     $questDirective = $Matches[1]
                     $questArgs = ($Matches[2] -replace '\s*--.*$', '')
                     $numberMatches = [regex]::Matches($questArgs, '(?<![.\d])\d+(?![.\d])')
@@ -616,7 +655,7 @@ foreach ($file in $files) {
                     }
                     for ($numberIndex = 0; $numberIndex -lt $numberLimit; $numberIndex++) {
                         $questId = [int]$numberMatches[$numberIndex].Value
-                        if ($questId -gt 0 -and -not $questIds.ContainsKey($questId)) { Add-Error "$relative`:$lineNumber quest $questId is absent from the 3.3.5 reference" }
+                        if ($questId -gt 0 -and -not $activeQuestIds.ContainsKey($questId)) { Add-Error "$relative`:$lineNumber quest $questId is absent from the 3.3.5 reference" }
                     }
                 }
                 if (-not $isOriginalSnapshot -and $line -match '^\.(fp|fly)\s+(.+?)(?:\s*>>|\s*<<|$)') {
@@ -731,7 +770,7 @@ foreach ($guide in $guides) {
     foreach ($guideName in $guide.Names) { $guideIndex["$($guide.Group)|$guideName"] = $true }
 }
 foreach ($guide in $guides) {
-    if ($guide.RawGroup.TrimStart('+', '*').StartsWith('Original Guides - ')) { continue }
+    if (Test-OriginalGuideSnapshot335 $guide.RawGroup) { continue }
     foreach ($rawNext in $guide.NextHeaders) {
         $condition = Get-GuideCondition $rawNext
         if ($condition -match '!wotlk|\bcata\b|\bmop\b') { continue }
@@ -862,7 +901,7 @@ foreach ($faction in @('A', 'H')) {
 
 $routeGuideIndex = @{}
 foreach ($guide in $guides) {
-    if ($guide.RawGroup.TrimStart('+', '*').StartsWith('Original Guides - ')) {
+    if (Test-OriginalGuideSnapshot335 $guide.RawGroup) {
         continue
     }
     $fixtureGroup = ($guide.RawGroup -replace '\s*<<.*$', '').Trim().TrimStart('+', '*')

@@ -20,6 +20,11 @@
 
     <Script file="Guides\Classic-Endgame335.lua"/>
 
+    <!-- Opt-in, experimental Hardcore families; independent canonical keys. -->
+    <Script file="Guides\Hardcore\Hardcore-Classic.lua"/>
+    <Script file="Guides\Hardcore\Hardcore-TBC.lua"/>
+    <Script file="Guides\Hardcore\Hardcore-Curated.lua"/>
+
     <Script file="Guides\TBC\Alliance-Leveling.lua"/>
     <Script file="Guides\TBC\Horde-Leveling.lua"/>
     <Script file="Guides\TBC\Alliance-Dungeons.lua"/>

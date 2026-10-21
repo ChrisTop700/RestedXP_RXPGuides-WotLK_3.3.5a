@@ -230,12 +230,18 @@ function sync:ShowSuggestion(sender, suggestion)
             end
             local guide = FindGuideByKey(data.guideKey)
             if not guide then return end
-            addon.guideState:Load(guide, true, "manual")
-            addon.GoToStep(data.step)
-            sync:Broadcast({command = "RXP_PARTY_ACK", protocol = PROTOCOL,
-                            accepted = true}, true)
+            addon.guideState:Load(guide, true, "manual", function()
+                addon.GoToStep(data.step)
+                sync.pendingSuggestion = nil
+                sync:Broadcast({command = "RXP_PARTY_ACK", protocol = PROTOCOL,
+                                accepted = true}, true)
+            end, function()
+                return sync.pendingSuggestion == data and GetTime() <= data.expires and
+                    IsSenderLeader(data.sender) and sync:IsEnabled()
+            end)
         end,
         OnCancel = function(_, data)
+            if sync.pendingSuggestion == data then sync.pendingSuggestion = nil end
             if data then
                 sync:Broadcast({command = "RXP_PARTY_ACK", protocol = PROTOCOL,
                                 accepted = false}, true)

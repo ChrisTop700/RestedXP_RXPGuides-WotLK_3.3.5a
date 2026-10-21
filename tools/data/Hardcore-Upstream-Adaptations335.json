@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "guides": [
+    {
+      "id": "Guides/SurvivalGuide/A-Classic-Alliance-1-13_Human.lua|RestedXP Survival Guide (A)|1-6 Northshire",
+      "sourceHash": "a149006d96259c554cea52cdaaf1f3cc496b6826e4b3bc8494d69bbe90934ae2",
+      "replacements": [
+        {
+          "from": "#next 6-11 Elwynn Forest; 6-13 Elwynn Forest",
+          "to": "#next 6-11 Elwynn Forest",
+          "reason": "The first authored destination exists and has no class/race/XP gate. Its era/som predicate permits non-seasonal WotLK. The alternate name does not exist in this pinned Classic family; preserve the first itinerary without a foreign fallback."
+        }
+      ]
+    },
+    {
+      "id": "Guides/SurvivalGuide/Hardcore.lua|RestedXP Survival Guide (H)|25-27 Southern Barrens/Stonetalon",
+      "sourceHash": "c02ec65bc92821bad1a9a46ca5f974b1d8d6b1fdd6f43246c68be750d913b5a2",
+      "replacements": [
+        {
+          "from": "<< Horde-\n",
+          "to": "<< Horde\n",
+          "reason": "Correct the malformed faction token in the source envelope before combining the 3.3.5/faction eligibility condition."
+        }
+      ]
+    },
+    {
+      "id": "Guides/tbc/The Burning Crusade.lua|RestedXP Survival Guide (A)|45-45 Tanaris",
+      "sourceHash": "f06d0e4e4ab8b6ca299120342fedce4aa66df79fbbc88ba8a1a23608ea5d5683",
+      "replacements": [
+        {
+          "from": "#next 45-46 Badlands/Searing Gorge;47-49 Tanaris",
+          "to": "#next 45-46 Badlands/Searing Gorge",
+          "reason": "Preserve the first authored Alliance continuation, which has no class/race/XP gate. The only 47-49 Tanaris in this TBC source family is Horde; never borrow it across factions."
+        }
+      ]
+    }
+  ]
+}

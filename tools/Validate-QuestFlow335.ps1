@@ -11,6 +11,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Guide-Families335.ps1')
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $errors = New-Object 'Collections.Generic.List[string]'
 $entryWarnings = @{}
@@ -433,6 +434,10 @@ foreach ($fileMatch in [regex]::Matches($manifest, '<Script\s+file="([^"]+)"\s*/
         $group = Normalize-Group $rawGroup
         $name = if ($headerValues['name']) { $headerValues['name'][0].Value } else { $null }
         if (-not $group -or -not $name) { continue }
+        # Each experimental Hardcore family has its own production-parser
+        # route/quest visitor. Never borrow its pickups or rewards for normal
+        # routes (or vice versa); the normal checker models softcore mode.
+        if (Test-HardcoreGuideGroup335 $rawGroup) { continue }
         if ($rawGroup.TrimStart('+', '*').StartsWith('Original Guides - ')) { continue }
         $parsedEvents = New-Object 'Collections.Generic.List[object]'
         $routeEvents = New-Object 'Collections.Generic.List[object]'

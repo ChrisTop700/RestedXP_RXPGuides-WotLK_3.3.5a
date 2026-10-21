@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Hardcore-EnglishNames335.ps1')
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 if (-not $AddonRoot) { $AddonRoot = Split-Path -Parent $PSScriptRoot }
 if (-not $OutputPath) {
@@ -16,6 +17,25 @@ $guideListPath = Join-Path $AddonRoot 'GuideList_335.xml'
 $guideList = [IO.File]::ReadAllText($guideListPath, $utf8)
 $requiredItems = @{}
 $names = @{}
+$preservedNames = @{}
+# Existing reviewed names (including hand-maintained additions) are an input,
+# not disposable output. Source prose is only a fallback for missing IDs.
+$existingCatalog=Join-Path $AddonRoot 'DB/wotlk/guideEnglishNames_335.lua'
+if(Test-Path -LiteralPath $existingCatalog -PathType Leaf){
+    $existing=[IO.File]::ReadAllText($existingCatalog,$utf8)
+    $items=[regex]::Match($existing,'(?s)\bitems\s*=\s*\{(.*?)\n\s*\},')
+    if(-not $items.Success){throw 'Existing English item catalog is malformed.'}
+    foreach($match in [regex]::Matches($items.Groups[1].Value,'\[(\d+)\]\s*=\s*"((?:\\.|[^"\\])*)"')){
+        $id=[int]$match.Groups[1].Value
+        if($preservedNames.ContainsKey($id)){throw 'Duplicate existing English item ID.'}
+        $name=[regex]::Replace($match.Groups[2].Value,'\\(.)',{
+            param($m)
+            if($m.Groups[1].Value -cnotin @('"','\')){throw 'Unsupported existing catalog escape.'}
+            $m.Groups[1].Value
+        })
+        $preservedNames[$id]=$name;$names[$id]=$name;$requiredItems[$id]=$true
+    }
+}
 $reviewedOverrides = @{
     2931 = "Maiden's Anguish"
     3703 = 'Southshore Stout'
@@ -66,7 +86,7 @@ foreach ($match in [regex]::Matches($guideList, '<Script\s+file="([^"]+\.lua)"')
         $comment = [regex]::Match($line, '--\s*(.+?)\s*$')
         if ($comment.Success) {
             $name = Clean-Name $comment.Groups[1].Value
-            if ($name) { $names[$id] = $name }
+            if ($name -and -not $preservedNames.ContainsKey($id)) { $names[$id] = $name }
         }
     }
 }
@@ -102,10 +122,23 @@ if (Test-Path -LiteralPath $referenceItemDb -PathType Leaf) {
 }
 foreach ($id in $reviewedOverrides.Keys) {
     if ($requiredItems.ContainsKey($id)) {
+        if($preservedNames.ContainsKey($id) -and $preservedNames[$id] -cne $reviewedOverrides[$id]){
+            throw "Reviewed override conflicts with an existing English name: $id"
+        }
         $names[$id] = $reviewedOverrides[$id]
     }
 }
 
+$hardcoreNames=Get-Content (Join-Path $PSScriptRoot 'data/Hardcore-EnglishItems335.json') -Raw | ConvertFrom-Json
+# The same validated fixture is used by the incremental merge and full builds.
+# Validate it before using entries, and reject any conflicting generated name
+# in the final merge rather than silently replacing it.
+Merge-HardcoreEnglishItems335 "items = {`n    }," $hardcoreNames | Out-Null
+foreach($entry in $hardcoreNames.items){
+    $id=[int]$entry.id
+    $requiredItems[$id]=$true
+    if(-not $names.ContainsKey($id)){$names[$id]=$entry.name}
+}
 $missing = @($requiredItems.Keys | Where-Object { -not $names.ContainsKey($_) })
 if ($missing.Count -gt 0) {
     throw "Reference data is missing $($missing.Count) required item names: $($missing -join ', ')"
@@ -184,5 +217,11 @@ foreach ($id in @($requiredItems.Keys | Sort-Object)) {
 [void]$builder.AppendLine('    spells = {')
 [void]$builder.AppendLine('    },')
 [void]$builder.AppendLine('})')
-[IO.File]::WriteAllText($OutputPath, $builder.ToString(), $utf8)
+$output=Merge-HardcoreEnglishItems335 $builder.ToString() $hardcoreNames
+if($existing){
+    $output=Merge-HardcoreEnglishEntries335 $output @(Get-HardcoreEnglishEntries335 $existing 'quests') 'quests'
+}
+$hardcoreQuests=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'data/Hardcore-QuestFacts335.json'),$utf8) | ConvertFrom-Json
+$output=Merge-HardcoreEnglishQuests335 $output $hardcoreQuests
+[IO.File]::WriteAllText($OutputPath, $output, $utf8)
 Write-Host "Generated $($requiredItems.Count) English item names."

@@ -2986,6 +2986,10 @@ function addon.functions.deathskip(self, ...)
         element.targets = {L"Spirit Healer","Alithea","Anara","Koiter"}
         return element
     end
+    if addon.gameVersion == 30300 and addon.settings.profile.hardcore then
+        self:SetScript("OnUpdate", nil)
+        return
+    end
     if not self.element.step.active then return end
     local event = ...
     if event == "PLAYER_UNGHOST" then
@@ -2996,6 +3000,10 @@ function addon.functions.deathskip(self, ...)
         not addon.settings.profile.enableGossipAutomation or IsShiftKeyDown() then return end
     if event == "CONFIRM_XP_LOSS" then
         self:SetScript("OnUpdate", function()
+            if addon.gameVersion == 30300 and addon.settings.profile.hardcore then
+                self:SetScript("OnUpdate", nil)
+                return
+            end
             local confirmed = false
             if C_PlayerInteractionManager and
                 C_PlayerInteractionManager.ConfirmationInteraction and Enum and
@@ -3937,6 +3945,9 @@ function addon.functions.next(skip, guide, arg1)
             --Iterates through every guide until it finds a valid one
             local candidateActive = candidateGuide and
                                         addon.IsGuideActive(candidateGuide)
+            if candidateActive and addon.hardcoreGuides then
+                candidateActive = addon.hardcoreGuides:AllowsTransition(guide, candidateGuide)
+            end
             if candidateActive and addon.gameVersion == 30300 then
                 local profile = addon.settings and addon.settings.profile or {}
                 candidateActive = not (candidateGuide.hardcore and

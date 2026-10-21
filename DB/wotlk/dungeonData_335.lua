@@ -22,6 +22,7 @@ local dungeonNames = {
     ZF = "Zul'Farrak",
     MARA = "Maraudon",
     ST = "The Temple of Atal'Hakkar",
+    BRD = "Blackrock Depths",
     RAMPARTS = "Hellfire Ramparts",
     BF = "The Blood Furnace",
     SP = "The Slave Pens",
