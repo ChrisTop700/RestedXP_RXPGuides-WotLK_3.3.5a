@@ -1,5 +1,6 @@
 param(
-    [switch]$RequireLua
+    [switch]$RequireLua,
+    [string]$LuaCommand = ''
 )
 
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -954,10 +955,13 @@ function Test-LuaSyntaxBatch([string]$Compiler, [string[]]$Files) {
 
 $lua = Get-Command lua5.1, lua -ErrorAction SilentlyContinue |
     Select-Object -First 1
+$luaPath = if ($LuaCommand) {
+    (Get-Command $LuaCommand -ErrorAction Stop).Source
+} elseif ($lua) { $lua.Source }
 $luac = Get-Command luac5.1, luac -ErrorAction SilentlyContinue |
     Select-Object -First 1
-if ($RequireLua -and (-not $lua -or -not $luac)) {
-    Add-ValidationError 'Lua 5.1 and luac 5.1 are required but were not found.'
+if ($RequireLua -and -not $luaPath) {
+    Add-ValidationError 'Lua 5.1 is required but was not found; supply LuaCommand for a local runner.'
 }
 if ($luac) {
     $plainSyntaxFiles = [Collections.Generic.List[string]]::new()
@@ -987,9 +991,24 @@ if ($luac) {
         }
     }
     Test-LuaSyntaxBatch $luac.Source ($plainSyntaxFiles.ToArray())
+} elseif ($luaPath) {
+    # The same Lua 5.1 compiler is exposed by loadstring. This keeps local
+    # runners fully checked when a separate luac executable is unavailable.
+    $syntaxRoot = Join-Path $root 'build/runtime-syntax'
+    [void][IO.Directory]::CreateDirectory($syntaxRoot)
+    $syntaxList = Join-Path $syntaxRoot ([guid]::NewGuid().ToString('N') + '.txt')
+    try {
+        [IO.File]::WriteAllLines($syntaxList, [string[]]@($loadedFiles |
+            Where-Object { [IO.Path]::GetExtension($_) -ieq '.lua' } | Sort-Object),
+            [Text.UTF8Encoding]::new($false))
+        & $luaPath (Join-Path $root 'tests/compile-manifest.lua') $syntaxList
+        if ($LASTEXITCODE -ne 0) { Add-ValidationError 'Lua 5.1 manifest syntax check failed.' }
+    } finally {
+        if (Test-Path -LiteralPath $syntaxList) { Remove-Item -LiteralPath $syntaxList }
+    }
 }
-if ($lua) {
-    & $lua.Source (Join-Path $root 'tests\run.lua') $root
+if ($luaPath) {
+    & $luaPath (Join-Path $root 'tests\run.lua') $root
     if ($LASTEXITCODE -ne 0) {
         Add-ValidationError 'Core Lua 5.1 tests failed.'
     }

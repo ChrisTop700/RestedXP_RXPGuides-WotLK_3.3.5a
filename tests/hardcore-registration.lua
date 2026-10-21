@@ -4,6 +4,19 @@
 local root, directory, curated = assert(arg[1]), assert(arg[2]), arg[3]
 local inputPath=assert(loadfile(root.."/tests/hardcore-input-path.lua"))()
 local newLoader = assert(loadfile(root .. "/tests/guide-loading.lua"))()(root,true)
+do
+    -- Reusing compiled source must never reuse closures, globals or guide state.
+    local first,firstEnv=newLoader("HUNTER","Orc",nil,"Horde",1)
+    local second,secondEnv=newLoader("MAGE","Human",nil,"Alliance",1)
+    assert(first.ParseGuide~=second.ParseGuide and getfenv(first.ParseGuide)==firstEnv and
+        getfenv(second.ParseGuide)==secondEnv,"Compiled fixture leaked its latest environment")
+    assert(first.applies("Orc") and not first.applies("Human") and
+        second.applies("Human") and not second.applies("Orc"),"Player predicates leaked across fixtures")
+    assert(first.functions.accept==first.functions.accept and
+        first.functions.accept~=second.functions.accept,"Inert fixture handlers lost ownership")
+    first.guideCache.isolation=true
+    assert(not second.guideCache.isolation,"Guide cache leaked across fixtures")
+end
 local function read(path)
     local f=assert(io.open(path,"rb")); local text=f:read("*a"):gsub("\r\n","\n"); f:close(); return text
 end

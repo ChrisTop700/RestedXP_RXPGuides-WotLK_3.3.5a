@@ -92,6 +92,8 @@ transcripts/
 
 # Lua tooling and generated output
 *.luac
+__pycache__/
+*.py[cod]
 luac.out
 .luacheckcache
 .luacov

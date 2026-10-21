@@ -17,11 +17,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Guides, quest flow, talents, and privacy
+  checks:
+    name: Validate ${{ matrix.suite }}
     # Match the release runner so case-sensitive path mistakes are caught on
     # ordinary pushes and pull requests instead of only after tagging.
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [runtime, quest-flow, hardcore]
 
     steps:
       - name: Check out repository
@@ -33,14 +37,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.1
 
-      - name: Validate runtime, guides, and localization loader
+      - name: Run validation suite
         shell: pwsh
         run: |
-          ./tools/Validate-Runtime335.ps1 -RequireLua
-          ./tools/Validate-Guides335.ps1
-          ./tools/Validate-GuideTranslations335.ps1 -CoreOnly
+          ./tools/Validate-All335.ps1 -Suite '${{ matrix.suite }}' -RequireLua
 
       - name: Resolve pinned localization commit
+        if: matrix.suite == 'runtime'
         id: localizations
         shell: bash
         run: |
@@ -53,6 +56,7 @@ jobs:
           echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
 
       - name: Check out pinned localization sources
+        if: matrix.suite == 'runtime'
         uses: actions/checkout@v7
         with:
           ref: ${{ steps.localizations.outputs.commit }}
@@ -63,10 +67,12 @@ jobs:
       # The localization branch distributes compiled artifacts, not compiler inputs.
       # Validate with this addon's libraries/loader, not stale tools in that branch.
       - name: Validate pinned locale artifacts against runtime
+        if: matrix.suite == 'runtime'
         shell: bash
         run: lua5.1 tools/validate-locale-artifacts.lua .release-localizations .
 
       - name: Validate locale release packaging
+        if: matrix.suite == 'runtime'
         shell: bash
         run: |
           set -euo pipefail
@@ -76,26 +82,15 @@ jobs:
             --version v0-ci \
             --revision "${{ steps.localizations.outputs.commit }}"
 
-      - name: Validate quest flow, talents, roadmap, and privacy
-        shell: pwsh
-        run: |
-          ./tools/Validate-QuestFlow335.ps1
-          ./tests/hardcore-upstream.ps1
-          ./tests/hardcore-coordinates.ps1
-          ./tests/hardcore-upstream-compatibility.ps1
-          ./tests/hardcore-pets.ps1
-          ./tests/hardcore-racial.ps1
-          ./tests/hardcore-warlock.ps1
-          ./tests/hardcore-travel.ps1
-          ./tests/hardcore-ferries.ps1
-          ./tests/hardcore-demons.ps1
-          ./tests/hardcore-english-names.ps1
-          ./tests/hardcore-publication-preflight.ps1
-          ./tests/hardcore-locations.ps1
-          python3 ./tests/hardcore_quest_facts.py
-          if ($LASTEXITCODE -ne 0) { throw 'Hardcore quest facts failed.' }
-          ./tools/Validate-HardcorePublication335.ps1
-          ./tests/hardcore-publication.ps1
-          ./tools/Validate-Talents335.ps1
-          ./tools/Validate-Roadmap335.ps1
-          ./tools/Validate-Privacy335.ps1
+  # Keep the previous aggregate status name for branch protection. A failed
+  # or cancelled matrix leg must never become a successful overall check.
+  validate:
+    name: Guides, quest flow, talents, and privacy
+    if: always()
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every validation suite
+        env:
+          RESULT: ${{ needs.checks.result }}
+        run: test "$RESULT" = success

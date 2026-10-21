@@ -2,6 +2,10 @@
 -- mocked runtime tests. Quest/UI handlers are inert: this tests which authored
 -- instructions survive class/race filtering, not gameplay automation.
 return function(root, fixturesOnly)
+    -- Compile immutable source once, but execute it for every fresh fixture.
+    -- Lua 5.1 closures created by each execution keep that fixture's own
+    -- environment; no addon, cache or parsed guide is shared between players.
+    local loaderChunk = assert(loadfile(root .. "/Guide/Loader.lua"))
     local function newLoader(class, race, character, faction, level)
         local env = setmetatable({}, {__index = _G})
         env._G = env
@@ -22,14 +26,15 @@ return function(root, fixturesOnly)
             separators = {}, guideCache = {}, db = {},
             RXPFrame = {GenerateMenuTable = function() end}, error = error,
         }
-        addon.functions = setmetatable({}, {__index = function(_, tag)
-            return function(raw, text, first, second)
+        addon.functions = setmetatable({}, {__index = function(functions, tag)
+            local handler = function(raw, text, first, second)
                 return {text = text, first = first, second = second, tag = tag}
             end
+            rawset(functions, tag, handler)
+            return handler
         end})
         env.RXPGuides = {}
-        local chunk = assert(loadfile(root .. "/Guide/Loader.lua"))
-        setfenv(chunk, env)("RXPGuides", addon)
+        setfenv(loaderChunk, env)("RXPGuides", addon)
         return addon, env
     end
     if fixturesOnly then return newLoader end

@@ -25,6 +25,9 @@ exceptions cannot grow unnoticed.
 
 ## Commands
 
+Development commands require a source checkout. Player release ZIPs omit
+`tools/`, `tests/` and build metadata; optional locale addon ZIPs are unchanged.
+
 Check out the `localizations` branch, then run these from its repository root
 with PowerShell 7 or Windows PowerShell:
 

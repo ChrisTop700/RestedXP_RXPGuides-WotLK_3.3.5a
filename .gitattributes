@@ -1,0 +1,11 @@
+# Development tooling stays in Git/CI, not in the player-facing git archive.
+/.github export-ignore
+/tools export-ignore
+/tests export-ignore
+/packaging export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/LOCALIZATIONS.lock export-ignore
+
+# Preserve runtime folders, bundled assets/licenses, and user documentation.
+# Optional locale ZIPs are built separately from the pinned locale checkout.

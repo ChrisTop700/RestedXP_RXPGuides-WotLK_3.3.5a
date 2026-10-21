@@ -19,8 +19,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  checks:
+    name: Validate ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [runtime, quest-flow, hardcore]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install Lua 5.1 test runtime
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+      - name: Run validation suite
+        shell: pwsh
+        run: ./tools/Validate-All335.ps1 -Suite '${{ matrix.suite }}' -RequireLua
+
   release:
     name: Package RXPGuides and publish release
+    needs: checks
     runs-on: ubuntu-latest
 
     steps:
@@ -35,13 +55,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y lua5.1
-
-      - name: Validate runtime, guides, and localization loader
-        shell: pwsh
-        run: |
-          ./tools/Validate-Runtime335.ps1 -RequireLua
-          ./tools/Validate-Guides335.ps1
-          ./tools/Validate-GuideTranslations335.ps1 -CoreOnly
 
       - name: Resolve pinned localization commit
         id: localizations
@@ -68,30 +81,6 @@ jobs:
       - name: Validate pinned locale artifacts against runtime
         shell: bash
         run: lua5.1 tools/validate-locale-artifacts.lua .release-localizations .
-
-      - name: Validate quest flow, talents, roadmap, and privacy
-        shell: pwsh
-        run: |
-          ./tools/Validate-QuestFlow335.ps1
-          ./tests/hardcore-upstream.ps1
-          ./tests/hardcore-coordinates.ps1
-          ./tests/hardcore-upstream-compatibility.ps1
-          ./tests/hardcore-pets.ps1
-          ./tests/hardcore-racial.ps1
-          ./tests/hardcore-warlock.ps1
-          ./tests/hardcore-travel.ps1
-          ./tests/hardcore-ferries.ps1
-          ./tests/hardcore-demons.ps1
-          ./tests/hardcore-english-names.ps1
-          ./tests/hardcore-publication-preflight.ps1
-          ./tests/hardcore-locations.ps1
-          python3 ./tests/hardcore_quest_facts.py
-          if ($LASTEXITCODE -ne 0) { throw 'Hardcore quest facts failed.' }
-          ./tools/Validate-HardcorePublication335.ps1
-          ./tests/hardcore-publication.ps1
-          ./tools/Validate-Talents335.ps1
-          ./tools/Validate-Roadmap335.ps1
-          ./tools/Validate-Privacy335.ps1
 
       - name: Resolve release metadata
         id: metadata
@@ -124,9 +113,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # git archive includes every tracked file from the release commit,
-          # excludes Git's internal metadata, and places the complete checkout
-          # beneath the folder players copy into Interface/AddOns.
+          # Preserve runtime assets and user docs, excluding developer-only
+          # files through the release commit's .gitattributes export rules.
           git archive \
             --format=zip \
             --prefix=RXPGuides/ \
@@ -147,6 +135,12 @@ jobs:
 
           echo "Created ${ARCHIVE}:"
           du -h "${ARCHIVE}"
+
+      - name: Verify player archive dependencies and exclusions
+        shell: pwsh
+        env:
+          ARCHIVE: ${{ steps.metadata.outputs.archive }}
+        run: ./tools/Test-ReleaseArchive335.ps1 -ArchivePath $env:ARCHIVE -Revision $env:GITHUB_SHA
 
       - name: Create optional locale ZIPs
         shell: bash

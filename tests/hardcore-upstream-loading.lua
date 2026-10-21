@@ -96,11 +96,13 @@ for _, profile in ipairs(profiles) do
             comms={PrettyPrint=function() end}, dungeons={}, icons={deathskip=""},
         }
         env.addon = addon
-        addon.functions = setmetatable({}, {__index=function(_, tag)
-            return function(_, text, first)
+        addon.functions = setmetatable({}, {__index=function(functions, tag)
+            local handler = function(_, text, first)
                 if tag == "deathskip" then addon.step.softcore = true end
                 return {text=text, first=first, tag=tag}
             end
+            rawset(functions,tag,handler)
+            return handler
         end})
         local function load(path) local fn=assert(loadfile(root .. "/" .. path)); setfenv(fn,env)("RXPGuides",addon) end
         load("DB/wotlk/dungeonData_335.lua")
