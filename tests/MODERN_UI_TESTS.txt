@@ -122,7 +122,35 @@ effective Quests.IgnoreAutoAccept setting; this addon does not change it).
    should affect the new one. Modern should have a cog, diagonal resize grip
    and tighter measured objective titles; Legacy keeps its original artwork.
 
-11. Unified hub (new; pending)
+11. Unified hub (user-confirmed smoke testing)
+   Classification/help follow-up: normal Speedrun routes appear under Leveling /
+   XP (not Other); all three Hardcore families appear under Type > Other.
+   Leveling, Hardcore, Endgame and Farming category buttons are absent. Click
+   Type twice: the second click closes the dropdown without changing filters.
+   Click once more: it reopens. Selected descriptions explicitly say
+   Speedrun or Hardcore and retain the family/collection identification.
+   Hover tabs, categories, filters, Type, actions, Backup, close/resize and
+   scroll controls in both styles. EXPECT: explanatory help, no actions on
+   hover, unchanged click behavior, and no duplicate Feature Tools shortcut on
+   the Guides page (the tab remains).
+   Library follow-up: hover the gray outline/gold filled Tabler star icons.
+   EXPECT: transparent backgrounds, readable shapes in Modern and Legacy,
+   including Custom themes, no remaining '+' or '*' text, Add/Remove Favorites
+   tooltip; clicking changes only Favorites, never expands or loads a guide.
+   Use Type to select Leveling / XP, Dungeons, Loot & gear, Professions,
+   Reputation, Daily quests or Attunements & keys. Existing faction/class,
+   availability and collection filters still apply; some combinations can be
+   empty. Leveling no longer includes profession or dungeon quest guides.
+   Open Choose Step and Find Start, then move over the hub and other tools.
+   EXPECT: confirmation stays above them, cancel/ESC never loads a guide.
+   ESC closes the library, including with the search box focused, and Backup.
+   Check again after reopening and in Legacy; persistent gameplay tools retain
+   their separate close policy. No progress reset is needed.
+   Icon shortcuts (both styles): right-click the HUD cog/header, minimap icon
+   and world-map RXP icon. EXPECT: Guides opens, and repeated right-clicks do
+   not close it or load a guide. The world map closes to reveal the library.
+   Shift-right-click the same controls: their existing menus appear instead.
+   Left-click behavior, HUD dragging and quest-step context menus are unchanged.
    a. Reload, run /rxp guides, select a guide WITHOUT loading it, and scroll.
       Switch through Feature Tools, Settings, Import and back to Guides.
       EXPECT: same preview, filters, favorite and list position; no quest,
@@ -144,6 +172,9 @@ effective Quests.IgnoreAutoAccept setting; this addon does not change it).
       known-good import only on a disposable profile; do not purge real data.
       Repeat with the original Interface > AddOns import panel, then use a
       different multiline editor. EXPECT: no stale paste hook on other editors.
+      Reopen Import after changing settings, then paste again after a rejected
+      import. EXPECT: no Enable/Disable/IsEnabled edit-box errors, working input
+      and one validation per click in both Modern and Legacy.
    e. With a Custom theme active, change an accent twice. Check HUD buttons,
       Active Items, Active Targets and the arrow. Switch guides and check the
       list cards: Modern must not regain ornate Legacy borders. Keep all tools
@@ -152,6 +183,10 @@ effective Quests.IgnoreAutoAccept setting; this addon does not change it).
       and pending Interface Style. No silent style change or automatic reload.
       Choose Legacy > Later, then reload voluntarily; repeat tabs a-e and check
       original HUD placement/artwork. Switch back to Modern and check placement.
+      In the Legacy library, select a long guide name/availability description
+      and scroll to the final guide. EXPECT: rows stop above the preview and
+      action buttons; no hidden row can be clicked over the footer. Repeat
+      with larger UI fonts and verify every guide remains reachable by scrolling.
    g. At minimum width and a larger font, check all tabs, lists, editors and
       scrollbars for overlap. Repeat key Durotar quest interactions with Questie
       tracking enabled and its automation disabled. Capture matched idle,
@@ -159,6 +194,8 @@ effective Quests.IgnoreAutoAccept setting; this addon does not change it).
       EXPECT: tab changes add no directive execution, guide parsing or map
       rebuilds. Report new errors, input issues or a noticeable performance loss.
 
-New consolidated-hub visual/performance acceptance remains pending until these
-in-game results are recorded. No deliberate Hardcore deaths, server edits or
-Questie modifications are needed.
+The user reported the consolidated UI working correctly, including the repaired
+Legacy overlap, and approved committing the changes. Individual checklist-case
+results and matched performance captures were not supplied; this confirmation
+does not establish exhaustive compatibility or measured performance acceptance.
+No deliberate Hardcore deaths, server edits or Questie modifications are needed.

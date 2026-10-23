@@ -138,7 +138,10 @@ return function(root)
     addon.GetGuideTable = function(_, name) return guides[name] end
     addon.GetGuideName = function(g) return g.name end
     addon.IsGuideActive = function() return true end
-    load("UI/GuideHub.lua"); load("UI/ModernLibrary.lua"); load("UI/LibraryTabs.lua")
+    -- Reproduce an existing client's file list without the new optional chunk.
+    -- Both views must get their controller from the shared hub itself.
+    load("UI/GuideHub.lua"); load("UI/ModernLibrary.lua")
+    check(type(addon.libraryTabs) == "table", "hub owns its required controller")
     local hub = addon.guideHub
     hub:Setup(); hub:Toggle()
     check(hub.frame.modern and #hub.filtered == 1, "modern library respects source collection")

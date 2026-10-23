@@ -40,7 +40,7 @@ function library:Details(hub)
     end
     local checkpoint = RXPCData.guideProgress and RXPCData.guideProgress[entry.key]
     local position = checkpoint and (checkpoint.currentStep or checkpoint.step)
-    local text = entry.name .. "\n\n" .. entry.group
+    local text = entry.name .. "\n\n" .. hub:GetPreviewIdentity(entry)
     if tonumber(position) then text = text .. "\n\n" .. string.format(L("Saved step: %d"), tonumber(position)) end
     if entry.reason then text = text .. "\n\n" .. entry.reason end
     if addon.hardcoreGuides and addon.hardcoreGuides:GetFamily(entry.guide) then
@@ -81,8 +81,10 @@ function library:Rows(hub)
             row.group:SetPoint("TOPLEFT", 30, -19)
             row.group:SetPoint("RIGHT", -6, 0)
             row.group:SetHeight(13)
-            row.star = view:Button(row, "+", 24, function() hub:ToggleFavorite(row.entry) end)
+            row.star = view:Button(row, "", 24, function() hub:ToggleFavorite(row.entry) end)
             row.star:SetPoint("LEFT", 2, 0)
+            row.star:SetScript("OnEnter", function(button) hub:FavoriteTooltip(button, row.entry) end)
+            row.star:SetScript("OnLeave", function() GameTooltip:Hide() end)
             row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
             row:SetScript("OnClick", function(self, button)
                 if button == "RightButton" then hub:ToggleFavorite(self.entry) else hub:Select(self.entry) end
@@ -91,7 +93,9 @@ function library:Rows(hub)
                 if not self.entry then return end
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:AddLine(self.entry.name, 1, 0.82, 0.35, true)
+                GameTooltip:AddLine(hub:GetPreviewIdentity(self.entry), 0.8, 0.84, 0.9, true)
                 GameTooltip:AddLine(self.entry.reason or self.entry.group, 0.8, 0.84, 0.9, true)
+                GameTooltip:AddLine(L("Left-click to preview; right-click to toggle Favorites."), 1, 1, 1, true)
                 GameTooltip:Show()
             end)
             row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -114,7 +118,7 @@ function library:Rows(hub)
         if entry then
             row.name:SetText(entry.name)
             row.group:SetText(entry.group)
-            row.star:SetText(entry.favorite and "*" or "+")
+            hub:UpdateFavoriteIcon(row.star, entry.favorite)
             row.name:SetTextColor(entry.active and 1 or 0.6, entry.active and 0.82 or 0.6, entry.active and 0.35 or 0.6)
             local selected = hub.selected and hub.selected.key == entry.key
             row:SetBackdropBorderColor(selected and 0.1 or 0.3, selected and 0.82 or 0.34, selected and 1 or 0.46, 1)
@@ -132,7 +136,7 @@ function library:Layout(hub)
     f.layoutBusy = true
     local wide = f:GetWidth() >= 840
     f.viewport:ClearAllPoints()
-    f.viewport:SetPoint("TOPLEFT", 166, -160)
+    f.viewport:SetPoint("TOPLEFT", 166, -192)
     f.viewport:SetPoint("BOTTOMRIGHT", wide and -286 or -40, wide and 66 or 205)
     f.details:ClearAllPoints()
     if wide then
@@ -150,19 +154,22 @@ end
 
 function library:Create(hub)
     local window = addon.toolWindows:Create({name = "RXPGuideHub", title = L("Guide Library"),
+        closeOnEscape = true,
         width = 940, height = 646, minWidth = 680, minHeight = 566, maxWidth = 1200, maxHeight = 950})
     local f = addon.libraryTabs:GuidePage(window)
     hub.window = window
     hub.frame = f
+    hub:AttachTooltip(window.closeButton, "Close")
+    hub:AttachTooltip(window.resizeButton, "Resize")
     f.modern, f.rows, f.navigation = true, {}, {}
     -- The library is a dialog; feature tools keep their existing no-Escape policy.
-    table.insert(UISpecialFrames, "RXPGuideHub")
     local function Navigation(text, x, y, width, selected, action)
         local button = view:Button(f, L(text), width, function()
             action(); hub:Select(nil); hub:Refresh()
         end)
         button:SetPoint("TOPLEFT", x, y)
         button.selected = selected
+        hub:AttachTooltip(button, text)
         f.navigation[#f.navigation + 1] = button
         return button
     end
@@ -173,19 +180,17 @@ function library:Create(hub)
         function() return hub.collection == "original" end,
         function() hub.collection = "original"; hub.hardcoreFamily = nil end)
     hub.collection = "validated"
-    for i, category in ipairs({{"all", "All guides"}, {"leveling", "Leveling"},
-        {"hardcore", "Hardcore"}, {"endgame", "Endgame"}, {"farming", "Farming"}}) do
-        local id = category[1]
-        Navigation(category[2], 16, -160 - (i - 1) * 32, 138,
-            function() return (hub.category or "all") == id end,
-            function() hub.category = id; hub.hardcoreFamily = nil end)
-    end
-    f.favorites = Navigation("Favorites", 16, -330, 138, function() return hub.favoritesOnly end,
+    Navigation("All guides", 16, -160, 138,
+        function() return (hub.category or "all") == "all" and not hub.hardcoreFamily and
+            (hub.purposeFilter or "all") == "all" end,
+        function() hub.category = "all"; hub.hardcoreFamily = nil; hub.purposeFilter = nil end)
+    f.favorites = Navigation("Favorites", 16, -202, 138, function() return hub.favoritesOnly end,
         function() hub.favoritesOnly = not hub.favoritesOnly end)
-    f.recent = Navigation("Recent", 16, -362, 138, function() return hub.recentOnly end,
+    f.recent = Navigation("Recent", 16, -234, 138, function() return hub.recentOnly end,
         function() hub.recentOnly = not hub.recentOnly end)
-    Navigation("Clear filters", 16, -404, 138, function() return false end, function()
+    Navigation("Clear filters", 16, -276, 138, function() return false end, function()
         hub.category, hub.hardcoreFamily, hub.favoritesOnly, hub.recentOnly = nil, nil, false, false
+        hub.purposeFilter = nil
         hub.factionFilter, hub.classFilter, hub.levelFilter, hub.availabilityFilter = "current", "current", "all", "all"
         for key, value in pairs({faction = "current", class = "current", level = "all", availability = "all"}) do
             RXPData.guideHub.filters[key] = value
@@ -194,12 +199,13 @@ function library:Create(hub)
         for _, button in ipairs(f.filters) do button:RefreshLabel() end
     end)
     local backup = view:Button(f, L("Backup"), 138, function() addon.roadmap:OpenBackupWindow() end)
-    backup:SetPoint("TOPLEFT", 16, -440)
+    hub:AttachTooltip(backup, "Backup")
+    backup:SetPoint("TOPLEFT", 16, -312)
     f.search = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
     f.search:SetSize(280, 24)
     f.search:SetPoint("TOPLEFT", 174, -88)
     f.search:SetAutoFocus(false)
-    f.search:SetScript("OnEscapePressed", function(box) box:ClearFocus() end)
+    f.search:SetScript("OnEscapePressed", function(box) box:ClearFocus(); window:Hide() end)
     f.search:SetScript("OnTextChanged", function(box)
         hub.searchText = box:GetText()
         if f.scroll then FauxScrollFrame_SetOffset(f.scroll, 0); hub:RefreshFilter() end
@@ -225,8 +231,11 @@ function library:Create(hub)
         end
         button:SetPoint("TOPLEFT", 166 + (i - 1) * 122, -122)
         button:RefreshLabel()
+        hub:AttachTooltip(button, caption)
         f[field], f.filters[i] = button, button
     end
+    f.purpose = hub:CreatePurposeFilter(f, 166, -156)
+    view:SkinControl(f.purpose)
     f.viewport = CreateFrame("ScrollFrame", nil, f)
     f.viewport:EnableMouseWheel(true)
     f.viewport:SetScript("OnMouseWheel", function(_, delta)
@@ -239,6 +248,7 @@ function library:Create(hub)
     f.viewport:SetScrollChild(f.rowCanvas)
     f.scroll = CreateFrame("ScrollFrame", "RXPGuideHubScroll", f, "FauxScrollFrameTemplate")
     f.scroll:SetAllPoints(f.viewport)
+    hub:AttachScrollTooltips(f.scroll)
     f.scroll:SetScript("OnVerticalScroll", function(self, offset)
         FauxScrollFrame_OnVerticalScroll(self, offset, f.rowHeight or ROW, function() library:Rows(hub) end)
     end)
@@ -247,6 +257,7 @@ function library:Create(hub)
     f.detailScroll = CreateFrame("ScrollFrame", "RXPGuideHubDetails", f.details, "UIPanelScrollFrameTemplate")
     f.detailScroll:SetPoint("TOPLEFT", 10, -10)
     f.detailScroll:SetPoint("BOTTOMRIGHT", -30, 10)
+    hub:AttachScrollTooltips(f.detailScroll)
     f.detailChild = CreateFrame("Frame", nil, f.detailScroll)
     f.detailChild:SetSize(200, 1)
     f.detailScroll:SetScrollChild(f.detailChild)
@@ -269,13 +280,13 @@ function library:Create(hub)
         local button = view:Button(f, L(action[2]), 110, action[3])
         button:SetPoint("BOTTOMLEFT", 16 + (i - 1) * 118, 24)
         button:Disable()
+        hub:AttachTooltip(button, action[2])
         f[action[1]] = button
     end
-    local tools = view:Button(f, L("Feature Tools"), 138, function() addon.settings.OpenFeatureToolSettings() end)
-    tools:SetPoint("BOTTOMRIGHT", -20, 24)
     f:SetScript("OnSizeChanged", function() library:Layout(hub) end)
     window.OnToolVisuals = function()
         view:Skin(f.details, true)
+        view:SkinControl(f.purpose)
         for _, row in ipairs(f.rows) do view:Skin(row, true); view:Skin(row.star, true) end
         for _, button in ipairs(f.navigation) do view:Skin(button, true) end
         library:Layout(hub)

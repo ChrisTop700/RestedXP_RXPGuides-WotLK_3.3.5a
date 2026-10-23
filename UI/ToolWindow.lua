@@ -100,6 +100,37 @@ local function PreventEscapeClose(name)
     end
 end
 
+-- Dialogs opt in explicitly; gameplay tools retain their persistent behavior.
+function manager:SetEscapeClose(frame, enabled)
+    local name = frame and frame:GetName()
+    if not name or not _G.UISpecialFrames then return end
+    PreventEscapeClose(name)
+    if enabled then table.insert(_G.UISpecialFrames, name) end
+end
+
+-- Only called from RXP-owned popup definitions. StaticPopup frames are pooled,
+-- so restore their strata on hide before another addon borrows the frame.
+function manager:RaisePopup(frame)
+    if not frame then return end
+    if not frame.rxpPopupStrata then
+        frame.rxpPopupStrata = frame:GetFrameStrata()
+        frame.rxpPopupLevel = frame:GetFrameLevel()
+    end
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetFrameLevel(1000)
+    if not frame.rxpPopupRestoreHook then
+        frame.rxpPopupRestoreHook = true
+        frame:HookScript("OnHide", function(self)
+            if self.rxpPopupStrata then
+                self:SetFrameStrata(self.rxpPopupStrata)
+                self:SetFrameLevel(self.rxpPopupLevel)
+                self.rxpPopupStrata = nil
+                self.rxpPopupLevel = nil
+            end
+        end)
+    end
+end
+
 local function GetProfile()
     return addon.settings and addon.settings.profile
 end
@@ -327,7 +358,7 @@ function manager:Create(spec)
     local name = assert(spec.name, "tool window requires a stable name")
     local existing = _G[name]
     if existing then
-        PreventEscapeClose(name)
+        self:SetEscapeClose(existing, (existing.toolWindowSpec or spec).closeOnEscape == true)
         return existing
     end
 
@@ -393,6 +424,7 @@ function manager:Create(spec)
 
     frame.UpdateVisuals = function(self) manager:ApplyVisuals(self) end
     frame:HookScript("OnShow", function(self)
+        manager:SetEscapeClose(self, spec.closeOnEscape == true)
         manager:ApplyVisuals(self)
         manager:BringToFront(self)
     end)
@@ -406,7 +438,7 @@ function manager:Create(spec)
     -- Feature tools are persistent working windows.  Keep Escape available
     -- for gameplay panels and close these only through their explicit X or
     -- toggle command.
-    PreventEscapeClose(name)
+    self:SetEscapeClose(frame, spec.closeOnEscape == true)
     self:RestorePlacement(frame, spec)
     self:ApplyVisuals(frame)
     frame:Hide()

@@ -54,6 +54,9 @@ function view:RequestStyle(style)
         text = L("Reload to apply the interface style? Guide progress is preserved."),
         button1 = L("Reload Now"), button2 = L("Later"), timeout = 0,
         whileDead = true, hideOnEscape = true,
+        OnShow = function(frame)
+            if addon.toolWindows then addon.toolWindows:RaisePopup(frame) end
+        end,
         OnAccept = function() view:Reload() end
     }
     StaticPopup_Show("RXP_UI_STYLE")

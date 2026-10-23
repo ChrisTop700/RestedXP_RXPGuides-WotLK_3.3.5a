@@ -644,6 +644,7 @@ Arrow data
 
     _G["RESTEDXP_BUG_REPORT_WINDOW"] = f.frame
     tinsert(_G.UISpecialFrames, "RESTEDXP_BUG_REPORT_WINDOW")
+    if addon.toolWindows then addon.toolWindows:RaisePopup(f.frame) end
 
     -- TODO save to variable to preserve open/close
 end
@@ -703,6 +704,7 @@ function addon.comms.OpenBrandedExport(title, description, content, width, heigh
 
     f:DoLayout()
     f:Show()
+    if addon.toolWindows then addon.toolWindows:RaisePopup(f.frame) end
 end
 
 function addon.comms:PrettyPrintTime(s)
@@ -742,6 +744,9 @@ function addon.comms:ConfirmChoice(lookup, prompt, confirmCallback, payload)
         button1 = _G.YES,
         button2 = _G.NO,
         OnAccept = function() if confirmCallback then confirmCallback(payload) end end,
+        OnShow = function(frame)
+            if addon.toolWindows then addon.toolWindows:RaisePopup(frame) end
+        end,
         timeout = 0,
         whileDead = 1,
         hideOnEscape = 1,
@@ -756,6 +761,9 @@ function addon.comms:PopupNotification(lookup, prompt)
     StaticPopupDialogs[lookup] = {
         text = prompt,
         button1 = _G.OKAY,
+        OnShow = function(frame)
+            if addon.toolWindows then addon.toolWindows:RaisePopup(frame) end
+        end,
         timeout = 0,
         whileDead = 1,
         hideOnEscape = 1,

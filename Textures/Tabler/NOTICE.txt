@@ -1,0 +1,10 @@
+Favorites icons adapted from Tabler Icons by Pawel Kuna.
+Repository: https://github.com/tabler/tabler-icons
+Revision: a4ce1404bc6d24d3c365afe7b258d6bf6f48d62d
+Sources: icons/outline/star.svg and icons/filled/star.svg
+License: MIT; see LICENSE.txt in this directory.
+
+Adaptation: rendered as white 32x32 uncompressed RGBA TGA textures for the
+WoW 3.3.5 client. The addon applies the inactive/selected colors at runtime.
+No SVG geometry changes. Original SVGs are kept in tools/data/TablerIcons.
+Rebuild offline on Windows with tools/Build-FavoriteIcons335.ps1.

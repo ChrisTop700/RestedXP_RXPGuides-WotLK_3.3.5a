@@ -802,9 +802,10 @@ function roadmap:OpenBackupWindow()
         return
     end
     local frame = CreateFrame("Frame", "RXPBackupWindow", UIParent)
+    addon.toolWindows:SetEscapeClose(frame, true)
     frame:SetSize(440, 132)
     frame:SetPoint("CENTER")
-    frame:SetFrameStrata("DIALOG")
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")

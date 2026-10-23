@@ -1,9 +1,220 @@
-local _, addon = ...
+local addonName, addon = ...
 
 local _G = _G
 local lower = string.lower
 local format = string.format
 local L = addon.locale.Get
+
+-- The tab controller is a required part of both hub presentations. Define it
+-- in this established manifest chunk so an updated hub cannot be loaded without
+-- its controller (including clients retaining an older manifest file list).
+do
+    local tabs = {}
+    addon.libraryTabs = tabs
+    local L = addon.locale.Get
+    local names = {"Guides", "Feature Tools", "Settings", "Import"}
+
+    -- Shared options-icon shortcut; callers retain their existing menu and
+    -- left-click behavior when this returns false. Opening is never a toggle.
+    function tabs:OpenFromOptions(button)
+        if button ~= "RightButton" or IsShiftKeyDown() then return false end
+        if _G.CloseDropDownMenus then _G.CloseDropDownMenus() end
+        self:Open("Guides")
+        return true
+    end
+
+    -- Only presentation state lives here. In particular, tab selection is never
+    -- written to a profile or a guide checkpoint.
+    function tabs:GuidePage(window)
+        local page = CreateFrame("Frame", nil, window)
+        page:SetPoint("TOPLEFT", 0, -36)
+        page:SetPoint("BOTTOMRIGHT", 0, 0)
+        return page
+    end
+
+    function tabs:Attach(window, guides)
+        self.window, self.pages, self.buttons = window, {Guides = guides}, {}
+        addon.toolWindows:SetEscapeClose(window, true)
+        self.selected = self.selected or "Guides"
+        for i, name in ipairs(names) do
+            local button = addon.presentation:Button(window, L(name), 145, function() tabs:Open(name) end)
+            addon.guideHub:AttachTooltip(button, name)
+            button:SetPoint("TOPLEFT", 18 + (i - 1) * 153, -40)
+            self.buttons[name] = button
+        end
+        window:HookScript("OnHide", function()
+            tabs:ClearFocus()
+            GameTooltip:Hide()
+        end)
+        window:HookScript("OnShow", function()
+            addon.toolWindows:SetEscapeClose(window, true)
+            tabs:RefreshVisible()
+        end)
+        window:HookScript("OnSizeChanged", function() tabs:SizeContainers() end)
+        -- The library's own OnToolVisuals remains responsible for guide cards.
+        local visuals = window.OnToolVisuals
+        window.OnToolVisuals = function(...)
+            if visuals then visuals(...) end
+            for _, button in pairs(tabs.buttons) do addon.presentation:SkinControl(button) end
+            if addon.featureToolsUI then addon.featureToolsUI:Refresh() end
+        end
+        for name, page in pairs(self.pages) do page:SetShown(name == self.selected) end
+    end
+
+    function tabs:ClearFocus()
+        if addon.guideHub.frame.search then addon.guideHub.frame.search:ClearFocus() end
+        local gui = LibStub("AceGUI-3.0")
+        gui:ClearFocus()
+    end
+
+    function tabs:HookEditorEscape(widget)
+        local editor = widget and (widget.editbox or widget.editBox)
+        if editor and not editor.rxpLibraryEscapeHook then
+            editor.rxpLibraryEscapeHook = true
+            editor:HookScript("OnEscapePressed", function(self)
+                -- AceGUI editors are pooled. Only close our hub while this
+                -- editor actually belongs to it, never a later borrower.
+                local parent = self
+                while parent do
+                    if parent == tabs.window then tabs.window:Hide(); return end
+                    parent = parent:GetParent()
+                end
+            end)
+        end
+        for _, child in ipairs(widget and widget.children or {}) do self:HookEditorEscape(child) end
+    end
+
+    function tabs:SizeContainers()
+        if self.sizing then return end
+        self.sizing = true
+        for _, page in pairs(self.pages or {}) do
+            if page.widget then
+                page.widget:SetWidth(math.max(100, page:GetWidth()))
+                page.status:SetWidth(math.max(100, page:GetWidth() - 8))
+                local statusHeight = page.status:GetText() ~= "" and page.status:GetStringHeight() + 8 or 0
+                page.widget:SetHeight(math.max(100, page:GetHeight() - statusHeight))
+                page.widget:DoLayout()
+            end
+        end
+        self.sizing = nil
+    end
+
+    -- Native AceConfig callbacks rebuild their own custom container directly.
+    -- Observe only our root's layout, never hook a library or replace an option
+    -- setter. Synchronize the independently registered fallback when it is visible.
+    function tabs:NativeRendered(name)
+        if self.rendering or self.sizing then return end
+        addon.scheduler:After(self, "fallback-" .. name, 0, function()
+            local panel = name == "Import" and addon.settings.gui.import or addon.RXPOptions
+            if not (panel and panel.obj and panel.obj.frame:IsVisible()) then return end
+            self.rendering = true
+            local app = name == "Import" and addon.RXPOptions.name .. "/Import" or addon.title
+            local ok, err = pcall(LibStub("AceConfigDialog-3.0").Open, LibStub("AceConfigDialog-3.0"), app, panel.obj)
+            self.rendering = nil
+            if name == "Import" and addon.settings.textboxHook then addon.settings.textboxHook(panel.obj) end
+            if not ok then geterrorhandler()(err) end
+        end)
+    end
+
+    function tabs:Page(name)
+        if self.pages[name] then return self.pages[name] end
+        local page = CreateFrame("Frame", nil, self.window)
+        page:Hide()
+        page:SetPoint("TOPLEFT", 16, -78)
+        page:SetPoint("BOTTOMRIGHT", -16, 18)
+        self.pages[name] = page
+        if name == "Feature Tools" then
+            addon.featureToolsUI:Create(page)
+        else
+            local widget = LibStub("AceGUI-3.0"):Create("SimpleGroup")
+            page.status = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            page.status:SetPoint("BOTTOMLEFT", 4, 0)
+            page.status:SetJustifyH("LEFT")
+            page.status:SetText("")
+            widget.SetStatusText = function(_, text)
+                page.status:SetText(text or "")
+                tabs:SizeContainers()
+            end
+            widget:SetLayout("Fill")
+            widget.noAutoHeight = true
+            widget.frame:SetParent(page)
+            -- AceGUI descendants are pooled with other addon interfaces. Never
+            -- attach persistent tool-window mouse hooks to those borrowed frames.
+            widget.frame.rxpPooledContent = true
+            widget.frame:SetFrameStrata(self.window:GetFrameStrata())
+            widget.frame:SetFrameLevel(page:GetFrameLevel() + 1)
+            widget.frame:ClearAllPoints()
+            widget.frame:SetPoint("TOPLEFT")
+            local finished = widget.LayoutFinished
+            widget.LayoutFinished = function(self, ...)
+                if finished then finished(self, ...) end
+                tabs:HookEditorEscape(self)
+                if name == "Import" and addon.settings.textboxHook then addon.settings.textboxHook(self) end
+                tabs:NativeRendered(name)
+            end
+            page.widget, page.dirty = widget, true
+            page:SetScript("OnSizeChanged", function() tabs:SizeContainers() end)
+        end
+        return page
+    end
+
+    function tabs:RefreshVisible()
+        if not self.window or not self.window:IsShown() then return end
+        local page = self.pages[self.selected]
+        if not page then return end
+        if self.selected == "Guides" then addon.guideHub:Refresh(); return end
+        if page.widget and page.dirty and not self.rendering then
+            self.rendering = true
+            page.dirty = nil
+            local app = self.selected == "Import" and addon.RXPOptions.name .. "/Import" or addon.title
+            page.widget:SetUserData("basepath", nil)
+            self:SizeContainers()
+            -- Render the registered tables themselves, including Profiles and
+            -- complex editors. AceConfig owns validation, confirmation and writes.
+            local ok, err = pcall(LibStub("AceConfigDialog-3.0").Open,
+                LibStub("AceConfigDialog-3.0"), app, page.widget)
+            self.rendering = nil
+            if ok and self.selected == "Import" and addon.settings.textboxHook then
+                addon.settings.textboxHook(page.widget)
+            end
+            if not ok then page.dirty = true; geterrorhandler()(err) end
+        elseif self.selected == "Feature Tools" then
+            addon.featureToolsUI:Refresh()
+        end
+    end
+
+    function tabs:SettingsChanged()
+        for _, page in pairs(self.pages or {}) do if page.widget then page.dirty = true end end
+        if self.refreshPending then return end
+        self.refreshPending = true
+        addon.scheduler:After(self, "settings", 0, function()
+            self.refreshPending = nil
+            if tabs.selected ~= "Guides" then tabs:RefreshVisible() end
+        end)
+    end
+
+    function tabs:Open(name, path)
+        addon.guideHub:CreateFrame()
+        name = self.buttons[name] and name or self.selected or "Guides"
+        self:ClearFocus()
+        local page = self:Page(name)
+        self.selected = name
+        for key, child in pairs(self.pages) do child:SetShown(key == name) end
+        for key, button in pairs(self.buttons) do
+            if key == name then button:Disable() else button:Enable() end
+        end
+        if name == "Feature Tools" then
+            addon.featureToolsUI:SetPath(path)
+        elseif name == "Settings" and path then
+            local selected = type(path) == "table" and path or {path}
+            LibStub("AceConfigDialog-3.0"):SelectGroup(addon.title, unpack(selected))
+            page.dirty = true
+        end
+        local wasShown = self.window:IsShown()
+        self.window:Show()
+        if wasShown then self:RefreshVisible() end
+    end
+end
 
 addon.guideHub = addon.guideHub or {}
 local hub = addon.guideHub
@@ -16,6 +227,140 @@ local classes = {
     WARLOCK = true, DRUID = true, DK = true
 }
 local factions = {ALLIANCE = true, HORDE = true}
+
+-- Presentation taxonomy only. Use canonical metadata, never localized display
+-- strings or quest contents, and never change guide identities or routing.
+hub.purposes = {
+    {"all", "All guide types"}, {"xp", "Leveling / XP"},
+    {"dungeon", "Dungeons"}, {"loot", "Loot & gear"},
+    {"profession", "Professions"}, {"reputation", "Reputation"},
+    {"daily", "Daily quests"}, {"attunement", "Attunements & keys"},
+    {"farming", "Farming"}, {"other", "Other guides"}
+}
+
+function hub:GetGuidePurpose(guide)
+    local group = lower(tostring(guide.group or "")):gsub("^[*+]", ""):gsub("^original guides %- ", "")
+    local subgroup = lower(tostring(guide.subgroup or ""))
+    if addon.hardcoreGuides and addon.hardcoreGuides:GetFamily(guide) then return "other" end
+    if group:find("profession", 1, true) or subgroup:find("profession", 1, true) or
+        group == "mining & herbalism" or group == "cooking & skinning" then return "profession" end
+    if group:find("attunement", 1, true) or subgroup == "attunements" or subgroup == "keys" then return "attunement" end
+    if subgroup:find("set guide", 1, true) then return "loot" end
+    if group:find("dungeon", 1, true) then return "dungeon" end
+    if group:find("reputation", 1, true) then return "reputation" end
+    if group:find("daily", 1, true) or group:find("argent tournament", 1, true) then return "daily" end
+    if guide.farm then return "farming" end
+    if group:find("speedrun guide", 1, true) or
+        group:find("wotlk guide", 1, true) or group:find("tbc guide", 1, true) or
+        group:find("survival", 1, true) or group:find("mage", 1, true) or
+        group:find("death knight", 1, true) or group:match("^restedxp alliance %d") or
+        group:match("^restedxp horde %d") or group:find("boosted", 1, true) then return "xp" end
+    return "other"
+end
+
+function hub:GetGuideIdentifier(guide)
+    if addon.hardcoreGuides and addon.hardcoreGuides:GetFamily(guide) then return L("Hardcore") end
+    if lower(tostring(guide.group or "")):find("speedrun guide", 1, true) then return L("Speedrun") end
+    local purpose = self:GetGuidePurpose(guide)
+    for _, item in ipairs(self.purposes) do if item[1] == purpose then return L(item[2]) end end
+    return L("Other guides")
+end
+
+function hub:GetPreviewIdentity(entry)
+    local original = tostring(entry.canonicalGroup or entry.guide.group):gsub("^[*+]", ""):find("Original Guides - ", 1, true) == 1
+    return L("Type") .. ": " .. self:GetGuideIdentifier(entry.guide) .. "\n" ..
+        L(original and "Original Upstream Guides" or "Validated & Fixed Guides") .. "\n" .. entry.group
+end
+
+hub.buttonHelp = {
+    ["Guides"] = "Search and preview guides. Loading a guide requires an explicit action.",
+    ["Feature Tools"] = "Configure optional tools and open their independent windows.",
+    ["Settings"] = "Open all addon settings, including automation, appearance and profiles.",
+    ["Import"] = "Paste and validate a custom guide before importing it.",
+    ["Validated & Fixed Guides"] = "Browse maintained routes and curated experimental Hardcore guides.",
+    ["Original Upstream Guides"] = "Browse original routes and separately adapted upstream Hardcore families.",
+    ["All guides"] = "Show all categories within the selected collection and current filters.",
+    ["Leveling"] = "Show normal leveling and speedrun routes. Hardcore has its own category.",
+    ["Hardcore"] = "Browse experimental deathless-oriented routes. These do not enforce server rules or guarantee survival.",
+    ["Endgame"] = "Browse endgame quest chains, equipment sets and attunements.",
+    ["Farming"] = "Show farming routes available in the current guide mode.",
+    ["Favorites"] = "Toggle the Favorites filter. Use a guide's star to add or remove it.",
+    ["Recent"] = "Toggle guides you have recently loaded, keeping the other filters.",
+    ["Clear filters"] = "Clear search, type, favorites and recent filters; restore current faction and class filters.",
+    ["Backup"] = "Open export, merge, replace and undo actions for addon data.",
+    ["Faction"] = "Click to switch between your current faction and all factions.",
+    ["Class"] = "Click to switch between your current class and all classes.",
+    ["Level"] = "Click to show all level ranges or only those containing your current level.",
+    ["Availability"] = "Click to cycle through all, available and unavailable guides.",
+    ["Type"] = "Filter guides by purpose, such as XP, dungeons, gear or professions. Hardcore is under Other. Click again to close the menu.",
+    ["Continue"] = "Load the selected guide using its existing saved progress.",
+    ["Restart"] = "Request confirmation to load the selected guide from step 1.",
+    ["Choose Step"] = "Enter a step number, then confirm loading the selected guide at that step.",
+    ["Find Start"] = "Analyze quest progress and preview a proposed starting step. Apply it only after confirmation.",
+    ["Close"] = "Close the library without disabling tools or changing guide progress.",
+    ["Resize"] = "Drag to resize the library. This does not change the guide HUD size.",
+    ["Scroll up"] = "Scroll upward without selecting or loading a guide.",
+    ["Scroll down"] = "Scroll downward without selecting or loading a guide.",
+    ["Scroll"] = "Drag the scrollbar to read more without changing guide progress."
+}
+
+function hub:AttachTooltip(button, key)
+    if not button or not self.buttonHelp[key] then return end
+    button.rxpLibraryHelp = key
+    if button.rxpLibraryHelpHook then return end
+    button.rxpLibraryHelpHook = true
+    button:HookScript("OnEnter", function(self)
+        local title = self.rxpLibraryHelp
+        _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        _G.GameTooltip:ClearLines()
+        _G.GameTooltip:AddLine(L(title), 1, 0.82, 0)
+        _G.GameTooltip:AddLine(L(hub.buttonHelp[title]), 1, 1, 1, true)
+        _G.GameTooltip:Show()
+    end)
+    button:HookScript("OnLeave", function() _G.GameTooltip:Hide() end)
+end
+
+function hub:AttachScrollTooltips(scroll)
+    if not scroll then return end
+    local name = scroll.GetName and scroll:GetName()
+    local bar = scroll.ScrollBar or (name and _G[name .. "ScrollBar"])
+    if not bar then return end
+    self:AttachTooltip(bar, "Scroll")
+    local barName = bar.GetName and bar:GetName()
+    self:AttachTooltip(bar.ScrollUpButton or (barName and _G[barName .. "ScrollUpButton"]), "Scroll up")
+    self:AttachTooltip(bar.ScrollDownButton or (barName and _G[barName .. "ScrollDownButton"]), "Scroll down")
+end
+
+function hub:FavoriteTooltip(button, entry)
+    if not entry then return end
+    _G.GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+    _G.GameTooltip:ClearLines()
+    _G.GameTooltip:AddLine(RXPData.guideHub.favorites[entry.key] and
+        L("Remove from Favorites") or L("Add to Favorites"), 1, 0.82, 0)
+    _G.GameTooltip:AddLine(L("Saved in the Favorites filter. This does not load or expand the guide."), 1, 1, 1, true)
+    _G.GameTooltip:Show()
+end
+
+function hub:UpdateFavoriteIcon(button, favorite)
+    if not button.favoriteIcon then
+        button:SetText("")
+        button.favoriteIcon = button:CreateTexture(nil, "OVERLAY")
+        button.favoriteIcon:SetSize(18, 18)
+        button.favoriteIcon:SetPoint("CENTER", button, "CENTER", 0, 0)
+    end
+    favorite = favorite and true or false
+    if button.favoriteIconState == favorite then return end
+    button.favoriteIconState = favorite
+    -- Shared assets, not theme-relative: Custom/Hardcore themes do not need
+    -- copies of these files. Shape as well as color indicates selection.
+    button.favoriteIcon:SetTexture("Interface\\AddOns\\" .. addonName ..
+        "\\Textures\\Tabler\\favorite-" .. (favorite and "filled" or "outline") .. ".tga")
+    if favorite then
+        button.favoriteIcon:SetVertexColor(1, 0.82, 0, 1)
+    else
+        button.favoriteIcon:SetVertexColor(0.7, 0.7, 0.7, 1)
+    end
+end
 
 local function ConditionAllows(condition, own, universe)
     if type(condition) ~= "string" or condition == "" then return true, false end
@@ -54,7 +399,7 @@ end
 local function DisplayGroup(group)
     local source = tostring(group or ""):gsub("^[*+]", "")
     local family = addon.hardcoreGuides and addon.hardcoreGuides:GetFamily({group = source})
-    if family then return family.label end
+    if family then return L("Hardcore") .. ": " .. family.label end
     if addon.guideLocalization then
         return addon.guideLocalization:RenderGroup(source)
     end
@@ -155,6 +500,8 @@ function hub:GetFilteredGuides()
             SearchText(entry.canonicalName):find(search, 1, true) or
             SearchText(entry.canonicalGroup):find(search, 1, true)
         local guide = entry.guide
+        local purpose = self:GetGuidePurpose(guide)
+        local purposeMatch = not self.purposeFilter or self.purposeFilter == "all" or self.purposeFilter == purpose
         local family = addon.hardcoreGuides and addon.hardcoreGuides:GetFamily(guide)
         local familyMatch = not self.hardcoreFamily or
             (family and family.id == self.hardcoreFamily)
@@ -164,8 +511,7 @@ function hub:GetFilteredGuides()
             (self.category == "hardcore" and family) or
             (self.category == "farming" and guide.farm) or
             (self.category == "endgame" and tostring(entry.canonicalGroup):find("Endgame", 1, true)) or
-            (self.category == "leveling" and not family and not guide.farm and
-                not tostring(entry.canonicalGroup):find("Endgame", 1, true))
+            (self.category == "leveling" and not family and purpose == "xp")
         local condition = type(guide.enabledFor) == "string" and
                               guide.enabledFor or ""
         local factionAllowed = ConditionAllows(condition, addon.player.faction,
@@ -182,7 +528,7 @@ function hub:GetFilteredGuides()
         local availabilityMatch = self.availabilityFilter == "all" or
             (self.availabilityFilter == "available" and entry.active) or
             (self.availabilityFilter == "unavailable" and not entry.active)
-        if collectionMatch and categoryMatch and familyMatch and textMatch and factionMatch and classMatch and levelMatch and
+        if collectionMatch and categoryMatch and purposeMatch and familyMatch and textMatch and factionMatch and classMatch and levelMatch and
             availabilityMatch and (not favoritesOnly or favorite) and
             (not recentOnly or recent[entry.key]) then
             entry.favorite = favorite
@@ -204,6 +550,7 @@ function hub:OpenHardcoreGuides(familyId)
     self.hardcoreFamily = familyId or "tbc"
     self.collection = self.hardcoreFamily == "curated" and "validated" or "original"
     self.category = "hardcore"
+    self.purposeFilter = nil
     self.favoritesOnly, self.recentOnly = false, false
     self.factionFilter, self.classFilter = "current", "current"
     self.levelFilter, self.availabilityFilter = "all", "available"
@@ -235,7 +582,8 @@ function hub:Select(entry)
             self.frame.findStart:Disable()
         end
         self.frame.status:SetText(entry and
-            (entry.reason or format("%s / %s", entry.group, entry.name)) or
+            (self:GetGuideIdentifier(entry.guide) .. " — " .. entry.name .. " / " .. entry.group ..
+                (entry.reason and ("\n" .. entry.reason) or "")) or
             "Select a guide")
         if self.frame.modern then addon.modernLibrary:Details(self) end
     end
@@ -259,6 +607,7 @@ function hub:ChooseStep()
         whileDead = 1,
         hideOnEscape = 1,
         OnShow = function(frame)
+            addon.toolWindows:RaisePopup(frame)
             frame.editBox:SetText("1")
             frame.editBox:SetFocus()
         end,
@@ -293,18 +642,49 @@ end
 function hub:RefreshRows()
     if not self.frame or not self.frame:IsShown() then return end
     if self.frame.modern then return addon.modernLibrary:Rows(self) end
+    local frame = self.frame
+    -- The tab strip and filters reduce the Legacy list's usable height.
+    -- Reserve the measured preview before deciding how many pooled rows fit.
+    frame.status:SetWidth(math.max(1, frame:GetWidth() - 50))
+    frame.status:SetHeight(0)
+    local statusHeight = math.min(96, frame.status:GetStringHeight())
+    frame.status:SetHeight(statusHeight)
+    local bottom = math.max(92, 68 + statusHeight + 10)
+    local _, nameSize = frame.rows[1].name:GetFont()
+    local _, groupSize = frame.rows[1].group:GetFont()
+    nameSize, groupSize = nameSize or 12, groupSize or 10
+    local rowHeight = math.max(ROW_HEIGHT, nameSize + groupSize + 6)
+    local visible = math.max(0, math.min(VISIBLE_ROWS,
+        math.floor((frame:GetHeight() - 142 - bottom) / rowHeight)))
+    frame.rowHeight, frame.visibleRows = rowHeight, visible
+    frame.scroll:ClearAllPoints()
+    frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -140)
+    frame.scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -47, bottom)
     local filtered = self.filtered or {}
-    local offset = FauxScrollFrame_GetOffset(self.frame.scroll)
-    FauxScrollFrame_Update(self.frame.scroll, #filtered, VISIBLE_ROWS,
-                           ROW_HEIGHT)
+    local offset = math.max(0, math.min(FauxScrollFrame_GetOffset(frame.scroll),
+        math.max(0, #filtered - math.max(1, visible))))
+    FauxScrollFrame_SetOffset(frame.scroll, offset)
+    FauxScrollFrame_Update(frame.scroll, #filtered, math.max(1, visible), rowHeight)
     for index, row in ipairs(self.frame.rows) do
-        local entry = filtered[offset + index]
+        local entry = index <= visible and filtered[offset + index] or nil
         row.entry = entry
         if entry then
+            row:SetHeight(rowHeight)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 26, -142 - (index - 1) * rowHeight)
+            row:SetPoint("RIGHT", -50, 0)
+            row.name:ClearAllPoints()
+            row.name:SetPoint("TOPLEFT", 28, -2)
+            row.name:SetWidth(math.max(1, frame:GetWidth() - 112))
+            row.name:SetHeight(nameSize + 2)
+            row.group:ClearAllPoints()
+            row.group:SetPoint("TOPLEFT", 28, -nameSize - 4)
+            row.group:SetWidth(math.max(1, frame:GetWidth() - 112))
+            row.group:SetHeight(groupSize + 2)
             row:Show()
             row.name:SetText(entry.name)
             row.group:SetText(entry.group)
-            row.favorite:SetText(entry.favorite and "|cffffd100*|r" or "+")
+            self:UpdateFavoriteIcon(row.favorite, entry.favorite)
             if entry.active then
                 row.name:SetTextColor(1, 0.82, 0)
                 row.group:SetTextColor(0.7, 0.7, 0.7)
@@ -327,6 +707,7 @@ function hub:Refresh()
 end
 
 function hub:RefreshFilter()
+    if self.frame and self.frame.purpose then self.frame.purpose:RefreshLabel() end
     local selectedKey = self.selected and self.selected.key
     self.filtered = self:GetFilteredGuides()
     if self.frame then
@@ -340,13 +721,51 @@ function hub:RefreshFilter()
     end
 end
 
-local function CreateButton(parent, text, width)
+local function CreateButton(parent, text, width, helpKey)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     button:SetSize(width, 24)
     button:SetText(text)
     if addon.locale and addon.locale.AttachStatusTooltip then
         addon.locale.AttachStatusTooltip(button, text)
     end
+    hub:AttachTooltip(button, helpKey or text)
+    return button
+end
+
+function hub:CreatePurposeFilter(parent, x, y)
+    local button = CreateButton(parent, "", 240)
+    self:AttachTooltip(button, "Type")
+    button:SetPoint("TOPLEFT", x, y)
+    local menuFrame = CreateFrame("Frame", "RXPGuideHubPurposeMenu", button, "UIDropDownMenuTemplate")
+    function button:RefreshLabel()
+        for _, item in ipairs(hub.purposes) do
+            if item[1] == (hub.purposeFilter or "all") then self:SetText(L("Type") .. ": " .. L(item[2])); return end
+        end
+    end
+    button:SetScript("OnClick", function()
+        -- EasyMenu reinitializes the shared dropdown before toggling it on
+        -- some legacy clients. Close our visible menu before rebuilding it.
+        if _G.UIDROPDOWNMENU_OPEN_MENU == menuFrame and
+            _G.DropDownList1 and _G.DropDownList1:IsShown() then
+            _G.CloseDropDownMenus()
+            return
+        end
+        local menu = {}
+        for _, item in ipairs(hub.purposes) do
+            local id = item[1]
+            menu[#menu + 1] = {text = L(item[2]), checked = id == (hub.purposeFilter or "all"),
+                func = function()
+                    hub.purposeFilter = id
+                    -- Show that type throughout the selected collection rather
+                    -- than leaving e.g. Professions hidden behind Leveling.
+                    hub.category, hub.hardcoreFamily = "all", nil
+                    FauxScrollFrame_SetOffset(hub.frame.scroll, 0)
+                    hub:RefreshFilter()
+                end}
+        end
+        _G.EasyMenu(menu, menuFrame, button, 0, 0, "MENU")
+    end)
+    button:RefreshLabel()
     return button
 end
 
@@ -374,6 +793,7 @@ function hub:CreateFrame()
     title:SetPoint("TOP", 0, -17)
     title:SetText(L("RXPGuides Guide Hub"))
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    self:AttachTooltip(close, "Close")
     close:SetPoint("TOPRIGHT", -5, -5)
 
     local window = frame
@@ -385,6 +805,7 @@ function hub:CreateFrame()
     search:SetSize(260, 24)
     search:SetPoint("TOPLEFT", 24, -50)
     search:SetAutoFocus(false)
+    search:SetScript("OnEscapePressed", function(box) box:ClearFocus(); window:Hide() end)
     search:SetTextInsets(6, 6, 0, 0)
     search:SetScript("OnTextChanged", function(box)
         hub.searchText = box:GetText()
@@ -394,7 +815,7 @@ function hub:CreateFrame()
         frame.count:SetText(format(L("%d guides"), #hub.filtered))
     end)
 
-    local favorites = CreateButton(frame, L("Favorites"), 105)
+    local favorites = CreateButton(frame, L("Favorites"), 105, "Favorites")
     frame.favorites = favorites
     favorites:SetPoint("LEFT", search, "RIGHT", 12, 0)
     favorites:SetScript("OnClick", function()
@@ -402,7 +823,7 @@ function hub:CreateFrame()
         favorites:SetText(hub.favoritesOnly and L("All guides") or L("Favorites"))
         hub:Refresh()
     end)
-    local recent = CreateButton(frame, L("Recent"), 90)
+    local recent = CreateButton(frame, L("Recent"), 90, "Recent")
     frame.recent = recent
     recent:SetPoint("LEFT", favorites, "RIGHT", 8, 0)
     recent:SetScript("OnClick", function()
@@ -410,21 +831,6 @@ function hub:CreateFrame()
         recent:SetText(hub.recentOnly and L("All") or L("Recent"))
         hub:Refresh()
     end)
-    local familyButton = CreateButton(frame, L("Hardcore"), 82)
-    familyButton:SetPoint("LEFT", recent, "RIGHT", 8, 0)
-    local familyMenu = CreateFrame("Frame", "RXPGuideHubFamilyMenu", frame, "UIDropDownMenuTemplate")
-    familyButton:SetScript("OnClick", function()
-        local menu = {}
-        for _, family in ipairs(addon.hardcoreGuides and addon.hardcoreGuides.families or {}) do
-            local id = family.id
-            menu[#menu + 1] = {text = family.label, checked = hub.hardcoreFamily == id,
-                func = function() hub:OpenHardcoreGuides(id) end}
-        end
-        menu[#menu + 1] = {text = L("All guides"), checked = not hub.hardcoreFamily,
-            func = function() hub.hardcoreFamily = nil; hub:Select(nil); hub:Refresh() end}
-        _G.EasyMenu(menu, familyMenu, familyButton, 0, 0, "MENU")
-    end)
-
     local function FilterButton(text, width, relative, update)
         local button = CreateButton(frame, text, width)
         button:SetPoint("TOPLEFT", relative, "BOTTOMLEFT", 0, -7)
@@ -479,42 +885,53 @@ function hub:CreateFrame()
     availabilityFilter:SetPoint("LEFT", levelFilter, "RIGHT", 7, 0)
     frame.factionFilter, frame.classFilter = factionFilter, classFilter
     frame.levelFilter, frame.availabilityFilter = levelFilter, availabilityFilter
+    self:AttachTooltip(factionFilter, "Faction")
+    self:AttachTooltip(classFilter, "Class")
+    self:AttachTooltip(levelFilter, "Level")
+    self:AttachTooltip(availabilityFilter, "Availability")
 
     frame.count = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.count:SetPoint("TOPRIGHT", -26, -113)
     local header = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     header:SetPoint("TOPLEFT", 28, -114)
-    header:SetText(L("Guide"))
+    header:SetText("")
+    frame.purpose = self:CreatePurposeFilter(frame, 24, -108)
 
     local scroll = CreateFrame("ScrollFrame", "RXPGuideHubScroll", frame,
                                "FauxScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 24, -132)
+    scroll:SetPoint("TOPLEFT", 24, -140)
     scroll:SetPoint("BOTTOMRIGHT", -47, 92)
     scroll:SetScript("OnVerticalScroll", function(self, offset)
-        FauxScrollFrame_OnVerticalScroll(self, offset, ROW_HEIGHT,
+        FauxScrollFrame_OnVerticalScroll(self, offset, frame.rowHeight or ROW_HEIGHT,
                                          function() hub:RefreshRows() end)
     end)
     frame.scroll = scroll
+    self:AttachScrollTooltips(scroll)
     frame.rows = {}
     for index = 1, VISIBLE_ROWS do
         local row = CreateFrame("Button", nil, frame)
         row:SetHeight(ROW_HEIGHT)
-        row:SetPoint("TOPLEFT", 26, -134 - (index - 1) * ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", 26, -142 - (index - 1) * ROW_HEIGHT)
         row:SetPoint("RIGHT", -50, 0)
         row.selected = row:CreateTexture(nil, "BACKGROUND")
         row.selected:SetAllPoints()
         row.selected:SetTexture(0.2, 0.35, 0.55, 0.55)
         row.selected:Hide()
-        row.favorite = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        row.favorite = CreateButton(row, "", 24)
         row.favorite:SetPoint("LEFT", 4, 0)
+        row.favorite:SetScript("OnClick", function() hub:ToggleFavorite(row.entry) end)
+        row.favorite:SetScript("OnEnter", function(button) hub:FavoriteTooltip(button, row.entry) end)
+        row.favorite:SetScript("OnLeave", function() _G.GameTooltip:Hide() end)
         row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         row.name:SetPoint("LEFT", 28, 6)
         row.name:SetPoint("RIGHT", -8, 6)
         row.name:SetJustifyH("LEFT")
+        if row.name.SetWordWrap then row.name:SetWordWrap(false) end
         row.group = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.group:SetPoint("LEFT", 28, -7)
         row.group:SetPoint("RIGHT", -8, -7)
         row.group:SetJustifyH("LEFT")
+        if row.group.SetWordWrap then row.group:SetWordWrap(false) end
         row:SetScript("OnClick", function(self, button)
             if button == "RightButton" then
                 hub:ToggleFavorite(self.entry)
@@ -523,25 +940,27 @@ function hub:CreateFrame()
             end
         end)
         row:SetScript("OnEnter", function(self)
+            if not self.entry then return end
+            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            _G.GameTooltip:ClearLines()
+            _G.GameTooltip:AddLine(self.entry.name, 1, 0.82, 0, true)
+            _G.GameTooltip:AddLine(hub:GetPreviewIdentity(self.entry), 1, 1, 1, true)
+            _G.GameTooltip:AddLine(L("Left-click to preview; right-click to toggle Favorites."), 1, 1, 1, true)
+            if self.entry.reason then _G.GameTooltip:AddLine(self.entry.reason, 1, 0.8, 0.5, true) end
             if self.entry and (self.entry.translationFallback or
                self.entry.translationMachine) and
                addon.guideLocalization then
-                _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                _G.GameTooltip:ClearLines()
                 local machine = self.entry.translationMachine
                 _G.GameTooltip:AddLine(machine and
                     addon.guideLocalization:GetMachineExplanation() or
                     addon.guideLocalization:GetFallbackExplanation(),
                     machine and 0.45 or 0.65, machine and 0.65 or 0.65,
                     machine and 1 or 0.65, true)
-                _G.GameTooltip:Show()
             end
+            _G.GameTooltip:Show()
         end)
         row:SetScript("OnLeave", function(self)
-            if self.entry and (self.entry.translationFallback or
-               self.entry.translationMachine) then
-                _G.GameTooltip:Hide()
-            end
+            _G.GameTooltip:Hide()
         end)
         row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         frame.rows[index] = row
@@ -549,8 +968,8 @@ function hub:CreateFrame()
 
     frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.status:SetPoint("BOTTOMLEFT", 25, 68)
-    frame.status:SetPoint("BOTTOMRIGHT", -25, 68)
     frame.status:SetJustifyH("LEFT")
+    if frame.status.SetWordWrap then frame.status:SetWordWrap(true) end
     frame.status:SetText(L("Select a guide"))
     frame.continue = CreateButton(frame, "Continue", 110)
     frame.continue:SetPoint("BOTTOMLEFT", 24, 26)
@@ -589,8 +1008,8 @@ function hub:CreateFrame()
     frame.findStart:Disable()
     window:Hide()
     self.frame = frame
+    frame:SetScript("OnSizeChanged", function() hub:RefreshRows() end)
     addon.libraryTabs:Attach(window, frame)
-    table.insert(_G.UISpecialFrames, "RXPGuideHub")
     return frame
 end
 

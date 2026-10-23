@@ -1013,9 +1013,6 @@ function importCache.validate(self)
     local status, errorMsg = addon.settings.ProcessImportBox(self)
     importCache.bufferString = ""
     importCache.bufferData = {}
-    -- Gets disabled on paste, re-enable after processing completes
-    local editor = importCache.editor or (importCache.widget and importCache.widget.obj.editBox)
-    if editor then editor:Enable() end
     importCache.editor = nil
     if errorMsg then
         addon.settings:UpdateImportStatusHistory(errorMsg)
@@ -1313,10 +1310,9 @@ function addon.settings:CreateImportOptionsPanel()
         end
         importCache.editor = this
         local time = GetTime()
-        if this:IsEnabled() then
-            -- Disable input while processing paste
-            this:Disable()
-        end
+        -- 3.3.5 EditBoxes have no Button-style Enable/Disable/IsEnabled API.
+        -- EditBoxHook already limits displayed bytes while OnChar collects
+        -- the full paste; keep input active until the buffer is processed.
         if importCache.lastBuffer ~= time or not this:GetScript("OnUpdate") then
             importCache.lastBuffer = time
             this:SetScript('OnUpdate', function(box)
@@ -1352,7 +1348,6 @@ function addon.settings:CreateImportOptionsPanel()
                         box:SetScript("OnUpdate", nil)
                         box:SetMaxBytes(0)
                         box.isMaxBytesSet = nil
-                        box:Enable()
                         box:ClearFocus()
                         if importCache.widget == widget.scrollFrame then importCache.widget = nil end
                     end
@@ -5397,6 +5392,7 @@ function addon.settings:UpdateMinimapButton()
             tocname = addonName,
             OnClick = function(_, button)
                 if button == "RightButton" then
+                    if addon.libraryTabs and addon.libraryTabs:OpenFromOptions(button) then return end
                     EasyMenu(buildMinimapMenu(), addon.settings.minimapFrame,
                              "cursor", 0, 0, "MENU")
                 else
@@ -5406,7 +5402,8 @@ function addon.settings:UpdateMinimapButton()
             OnTooltipShow = function(tooltip)
                 tooltip:AddLine(addon.title)
                 tooltip:AddLine("|cff909090Left Click: |cffffcc00Toggle Guide|r")
-                tooltip:AddLine("|cff909090Right Click: |cffffcc00Show Menu|r")
+                tooltip:AddLine("|cff909090Right Click: |cffffcc00" .. L("Guide Library") .. "|r")
+                tooltip:AddLine("|cff909090Shift-Right Click: |cffffcc00Show Menu|r")
             end
         })
     end
@@ -6026,7 +6023,13 @@ function addon.settings:SetupMapButton()
                                             self.worldMapButton,
                                             "UIDropDownMenuTemplate")
     end
-    self.worldMapButton:SetScript("OnClick", function(button)
+    self.worldMapButton:SetScript("OnClick", function(button, mouseButton)
+        if addon.libraryTabs and addon.libraryTabs:OpenFromOptions(mouseButton) then
+            button.menuFrame:Hide()
+            -- The stock full-screen map would otherwise cover the DIALOG hub.
+            HideUIPanel(_G.WorldMapFrame)
+            return
+        end
         if addon.gameVersion == 30300 then
             local menuFrame = button.menuFrame
             if menuFrame:IsShown() then
@@ -6041,8 +6044,8 @@ function addon.settings:SetupMapButton()
         end
     end)
 
+    self.worldMapButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     if addon.gameVersion == 30300 then
-        self.worldMapButton:RegisterForClicks("LeftButtonUp")
         if self.worldMapButton.SetToplevel then
             self.worldMapButton:SetToplevel(true)
         end

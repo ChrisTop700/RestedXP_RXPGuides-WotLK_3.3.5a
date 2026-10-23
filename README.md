@@ -109,3 +109,5 @@ Further reading: [features and tools](FEATURES_335.md) · [translation contribut
 Thanks to **RestedXP** and its contributors for the original addon and guides; **AzerothCore** for server references; **Zygor Guides Viewer** contributors and [Zygor Guides Viewer Remaster](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) for converted WotLK route material; the bundled-library authors; and everyone testing and improving the project.
 
 See [LICENSE](LICENSE). This is a mixed-license distribution: bundled libraries, assets and guide content retain their own licenses and attribution notices.
+
+Favorites icons are adapted from [Tabler Icons](https://github.com/tabler/tabler-icons) by Paweł Kuna, under the [MIT license](Textures/Tabler/LICENSE.txt).

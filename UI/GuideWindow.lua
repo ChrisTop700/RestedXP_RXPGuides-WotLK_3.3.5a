@@ -1747,7 +1747,11 @@ Footer.cog:SetPoint("LEFT", Footer, "LEFT", 1, 1)
 Footer.cog:SetHighlightTexture(
     "Interface/MINIMAP/UI-Minimap-ZoomButton-Highlight", "ADD")
 Footer.cog:Show()
-Footer.cog:SetScript("OnClick", function(self) RXPFrame.DropDownMenu() end)
+Footer.cog:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+Footer.cog:SetScript("OnClick", function(self, button)
+    if addon.libraryTabs and addon.libraryTabs:OpenFromOptions(button) then return end
+    RXPFrame.DropDownMenu()
+end)
 
 Footer.browse = CreateFrame("Button", nil, Footer,
                             "UIPanelButtonTemplate")
@@ -1905,6 +1909,7 @@ end
 
 GuideName.OnMouseDown = function(self, button)
     if button == "RightButton" then
+        if addon.libraryTabs and addon.libraryTabs:OpenFromOptions(button) then return end
         RXPFrame.DropDownMenu()
     else
         RXPFrame.OnMouseDown(self, button)
