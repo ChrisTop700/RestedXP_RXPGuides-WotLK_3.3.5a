@@ -1,0 +1,73 @@
+UI and inventory refresh pass - client acceptance checklist
+
+Automated work-count checks do not establish reduced frame-time spikes or
+resolution of issue #10. Large guide-memory reductions are not part of this pass.
+Guide contents, EP weights, optional-feature defaults and saved progress are unchanged.
+
+Preparation
+- Start with RXPGuides, BugGrabber and BugSack only. Use a disposable Orc Warrior
+  in Validated & Fixed Guides -> 1-6 Durotar. Preserve real SavedVariables.
+- Leave Adaptive performance throttling off for matched performance captures.
+- Use the same guide, UI style, visible windows, bag contents and scenario length
+  for comparisons. Separate cold-login tests from warmed-up tests.
+- Use existing controls to enable Item Upgrade and auction scanning when testing
+  them. Restore your preferences afterward; no defaults were changed.
+
+1. Quest progression, inventory and equipment locks
+   Accept Cutting Teeth (788), loot equipment, complete Sarkoth (790/804), and
+   perform the mixed Gornek interactions. Verify objectives, manual rewards and
+   quest-log header expansion still work. Check upgrade suggestions and junk
+   protection, including an empty equipment slot.
+   Under Tips / Item Upgrade, use Keep this equipped to lock an occupied slot.
+   Replacement suggestions must pause and replacement gear remain protected.
+   Unlock and verify suggestions resume. Move a recommended item to another bag
+   slot before clicking Equip: a stale slot must not equip a different item.
+
+2. Weapon skills and training
+   Gain several ordinary weapon-skill points. Normal guide menus should not
+   rebuild for every skill event. At a weapon master, learn a new eligible weapon
+   proficiency and verify newly usable items are reconsidered, including junk
+   overlays. Repeat with upgrade prompts disabled; eligibility must still update.
+   Leave the skill panel collapsed before training and check its state afterward.
+   In Gold Assistant mode, profession eligibility must refresh after skill bursts;
+   level-up eligibility must refresh in both modes.
+
+3. Library and layering (Modern and Legacy)
+   Search and change filters; selection, descriptions and favorites must agree
+   with visible rows. Open overlapping tool windows and move between their
+   controls. The front window must remain legible and clickable without flicker.
+   Open Settings, Import and Feature Tools for the first time, expand tool
+   controls, and resize the Modern library to expose additional rows. New controls
+   must layer correctly. Shared AceGUI controls must also work in Interface options.
+
+4. Gear Advisor
+   Open Bags, scroll, hide it, loot/change equipment, and reopen. It must show
+   current data once, not an old inventory snapshot. Change between Bags, Quest
+   Rewards and Auction House; each view resets scrolling as before.
+   Test a cold-cache item: its recommendation should appear when data arrives.
+   Change quests while Rewards is visible. A stale row must never select another
+   quest's reward. Click-time equipment checks remain authoritative.
+
+5. Auction House (separate character permitted)
+   Run a cold-cache bounded upgrade scan, cancel midway, then scan again. Check
+   delayed results and Find/search behavior. No late results may revive a cancelled
+   scan. Missing item data must settle after the existing bounded retries rather
+   than cause an endless refresh. Unrelated item tooltips must not trigger AH work.
+
+6. Map and addon coexistence
+   Advance Durotar steps with the map closed, open and enlarge it, close and reopen
+   while enlarged, and change zones. Verify guide pins, minimap pins and arrow.
+   Repeat the key quest, inventory and map checks with Questie tracking enabled and
+   Questie automation disabled. Record any Lua errors and unexpected click behavior.
+
+Measurement
+Capture matched 30-second scenarios: library filtering/window hover, looting with
+Advisor hidden, Advisor scrolling, weapon-skill changes, and map reopening.
+Compare total/peak/self time and whole-client frame intervals, not average FPS alone.
+New fixed capture-only labels: guide catalogue, tool layering, gear advisor scan,
+equipment proficiency refresh. Corresponding counters report actual rebuilds or
+passes. No new memory sampling, raw event logging or permanent polling was added.
+Idle hovering over an already-front tool must not add layering passes; Advisor
+scrolling must not add rebuilds/comparisons; hidden Advisor events must not rebuild.
+Necessary skill-up invalidations remain intentional and are not deduplicated across
+separate settled skill-ups. Report these client results separately from Lua tests.

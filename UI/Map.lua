@@ -526,6 +526,7 @@ MapPinPool.resetterFunc = function(framePool, frame)
     frame:Hide()
     frame:EnableMouse(0)
     frame.currentPin = nil
+    frame.activeObject = nil
 end
 
 

@@ -995,6 +995,7 @@ end
 
 assert(loadfile(root .. "/tests/guide-loading.lua"))()(root)
 assert(loadfile(root .. "/tests/performance.lua"))()(root)
+assert(loadfile(root .. "/tests/refresh-performance.lua"))()(root)
 assert(loadfile(root .. "/tests/modern-ui.lua"))()(root)
 assert(loadfile(root .. "/tests/export-window.lua"))()(root)
 assert(loadfile(root .. "/tests/map-performance.lua"))()(root)

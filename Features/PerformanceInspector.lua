@@ -11,6 +11,8 @@ local HISTOGRAM = {0.1, 0.5, 1, 2, 4, 8, 16, 33, 50, 100, 250, 1000, 60000}
 local MAX_METRICS = 64
 -- Code-owned labels only: never quest, item, unit or player data.
 local COUNTERS = {
+    ["guide catalogue rebuilds"] = true, ["tool layering passes"] = true,
+    ["gear advisor rebuilds"] = true, ["equipment proficiency refreshes"] = true,
     ["bag buttons"] = true, ["item cache misses"] = true,
     ["row text writes"] = true, ["row measurements"] = true,
     ["row measurement hits"] = true, ["row positions shifted"] = true,
@@ -23,6 +25,8 @@ local COUNTERS = {
     ["nameplate children"] = true, ["timer callbacks due"] = true,
 }
 local LABELS = {
+    ["guide catalogue"] = true, ["tool layering"] = true,
+    ["gear advisor scan"] = true, ["equipment proficiency refresh"] = true,
     ["main update"] = true, ["map refresh"] = true, ["guide parsing"] = true,
     ["map reset"] = true, ["map lines"] = true, ["map world pins"] = true,
     ["map minimap pins"] = true, ["map arrow"] = true, ["map visibility"] = true,
@@ -319,6 +323,9 @@ function inspector:Wrap(container, key, label)
 end
 
 function inspector:InstallInstrumentation()
+    self:Wrap(addon.guideHub, "Refresh", "guide catalogue")
+    self:Wrap(addon.toolWindows, "RefreshLayering", "tool layering")
+    self:Wrap(addon.gearAdvisor, "BuildRows", "gear advisor scan")
     self:Wrap(addon, "UpdateMap", "map refresh")
     self:Wrap(addon, "LegacyUpdateLoop", "main update")
     self:Wrap(addon, "ParseGuide", "guide parsing")

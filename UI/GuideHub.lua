@@ -155,6 +155,7 @@ do
             page.widget, page.dirty = widget, true
             page:SetScript("OnSizeChanged", function() tabs:SizeContainers() end)
         end
+        addon.toolWindows:RefreshLayering()
         return page
     end
 
@@ -481,6 +482,7 @@ end
 
 function hub:GetFilteredGuides()
     local search = self.searchText and lower(self.searchText) or ""
+    local level = UnitLevel("player") or 1
     local function SearchText(value)
         value = tostring(value or "")
         value = value:gsub("%s*|cff9d9d9d%[EN%]|r", "")
@@ -522,7 +524,6 @@ function hub:GetFilteredGuides()
         local classMatch = self.classFilter == "all" or classAllowed
         local low, high = tostring(guide.name or entry.name):match("(%d+)%s*%-%s*(%d+)")
         low, high = tonumber(low), tonumber(high)
-        local level = UnitLevel("player") or 1
         local levelMatch = self.levelFilter == "all" or not low or
                                (level >= low and level <= high)
         local availabilityMatch = self.availabilityFilter == "all" or
@@ -702,6 +703,7 @@ end
 
 function hub:Refresh()
     if not RXPData or not RXPCData then return end
+    if addon.PerfCount then addon.PerfCount("guide catalogue rebuilds") end
     self.guides = BuildGuideList()
     self:RefreshFilter()
 end
@@ -717,7 +719,6 @@ function hub:RefreshFilter()
             if entry.key == selectedKey then selected = entry; break end
         end
         self:Select(selected)
-        self:RefreshRows()
     end
 end
 

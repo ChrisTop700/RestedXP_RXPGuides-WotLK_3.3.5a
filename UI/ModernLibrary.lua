@@ -66,6 +66,7 @@ function library:Rows(hub)
     local offset = math.min(FauxScrollFrame_GetOffset(f.scroll), math.max(0, #filtered - count))
     FauxScrollFrame_SetOffset(f.scroll, offset)
     FauxScrollFrame_Update(f.scroll, #filtered, count, rowHeight)
+    local grew = false
     for i = 1, count do
         if not f.rows[i] then
             local row = CreateFrame("Button", nil, f.rowCanvas)
@@ -100,8 +101,10 @@ function library:Rows(hub)
             end)
             row:SetScript("OnLeave", function() GameTooltip:Hide() end)
             f.rows[i] = row
+            grew = true
         end
     end
+    if grew then addon.toolWindows:RefreshLayering() end
     for i, row in ipairs(f.rows) do
         row:SetHeight(rowHeight - 2)
         row:ClearAllPoints()

@@ -68,7 +68,6 @@ local session = {
     trainedShield = nil,
     wearabilityLevel = nil,
     wearabilityClass = nil,
-    proficiencyRefreshSerial = 0,
 
     weaponSlotToWeightKey = {},
 
@@ -1202,11 +1201,8 @@ end
 
 function addon.itemUpgrades:WEAPON_PROFICIENCY_CHANGED()
     if session.scanningProficiencies then return end
-    session.proficiencyRefreshSerial = session.proficiencyRefreshSerial + 1
-    local serial = session.proficiencyRefreshSerial
-
     local function ApplyProficiencyChange(queueUpgradeScan)
-        if serial ~= session.proficiencyRefreshSerial then return end
+        if addon.PerfCount then addon.PerfCount("equipment proficiency refreshes") end
         -- Re-resolve slot functions as well as subtype proficiencies. This
         -- matters for level-gated armor and Dual Wield (including the WotLK
         -- Shaman talent), which change usable layouts without changing an item.
@@ -1222,6 +1218,12 @@ function addon.itemUpgrades:WEAPON_PROFICIENCY_CHANGED()
             addon.inventoryManager.UpdateAllBags()
         end
         addon:SendEvent("RXP_JUNK")
+        -- Advisor rows now retain their comparison results between paints.
+        -- Notify after the capability cache settles (also covers Setup after
+        -- changing weights), never before the new eligibility is available.
+        if addon.gearAdvisor and addon.gearAdvisor.Refresh then
+            addon.gearAdvisor:Refresh()
+        end
         if queueUpgradeScan and addon.settings.profile.enableItemUpgrades then
             QueueUpgradeScan(0.25)
         end
@@ -1229,7 +1231,13 @@ function addon.itemUpgrades:WEAPON_PROFICIENCY_CHANGED()
 
     -- Coalesce skill/spell bursts; header expansion during our scan is not a
     -- new training event. Every equip click still revalidates independently.
-    C_Timer.After(0.25, function() ApplyProficiencyChange(true) end)
+    addon.scheduler:After(self, "proficiencies", 0.25, function()
+        if addon.PerfInvoke then
+            addon.PerfInvoke("equipment proficiency refresh", ApplyProficiencyChange, true)
+        else
+            ApplyProficiencyChange(true)
+        end
+    end)
 end
 
 function addon.itemUpgrades:LoadStatWeights()
@@ -3686,7 +3694,6 @@ local AuctionFilterButtons = {["Weapons"] = 1, ["Armor"] = 2}
 
 local ahSession = {
     isInitialized = false,
-    infoItemsReceived = {}, -- takes itemID, not itemLinks
 
     -- Cannot cache to RXPCData, because comparisons are mutable and embedded in weighting
     scanData = {},
@@ -3737,7 +3744,6 @@ function addon.itemUpgrades.AH:Setup()
     self:RegisterEvent("AUCTION_HOUSE_SHOW")
     self:RegisterEvent("AUCTION_HOUSE_CLOSED")
 
-    self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     self:RegisterEvent("AUCTION_ITEM_LIST_UPDATE")
 
     ahSession.isInitialized = true
@@ -3860,18 +3866,6 @@ function addon.itemUpgrades.AH:StartScan()
     end
     if self.RefreshLegacyResults then self:RefreshLegacyResults() end
     self:Scan()
-end
-
--- Fired when GetItemInfo queries the server for an uncached item and the reponse has arrived.
-function addon.itemUpgrades.AH:GET_ITEM_INFO_RECEIVED(_, itemID, success)
-    if not success then return end
-
-    if ahSession.infoItemsReceived[itemID] then return end
-
-    -- If item queried, it's probably applicable to ItemUpgrades, so build and cache
-    -- TODO ensure no infinite loop
-    addon.itemUpgrades:GetItemData("item:" .. itemID)
-    ahSession.infoItemsReceived[itemID] = true
 end
 
 -- Helper function for scanning.xml RXP_IU_AH_BuyButton:OnClick

@@ -1,7 +1,6 @@
 local _, addon = ...
 
 local _G = _G
-local C_Timer = addon.timer
 local format = string.format
 local L = addon.locale.Get
 
@@ -98,6 +97,7 @@ function advisor:ScanRewards()
 end
 
 function advisor:BuildRows()
+    if addon.PerfCount then addon.PerfCount("gear advisor rebuilds") end
     if self.view == "rewards" then return self:ScanRewards() end
     if self.view == "auction" then
         return addon.itemUpgrades.AH and
@@ -137,12 +137,27 @@ local function LayoutText(entry)
 end
 
 function advisor:Refresh()
+    addon.scheduler:Cancel(self, "refresh")
+    self.dataDirty = true
+    if not self.frame or not self.frame:IsShown() then return end
+    self.entries = self:BuildRows()
+    self.dataDirty = false
+    self:PaintRows()
+end
+
+function advisor:RequestRefresh(delay)
+    self.dataDirty = true
+    if not self.frame or not self.frame:IsShown() then return end
+    if addon.scheduler:Has(self, "refresh") then return end
+    addon.scheduler:After(self, "refresh", delay or 0.15, function() self:Refresh() end)
+end
+
+function advisor:PaintRows()
     if not self.frame or not self.frame:IsShown() then return end
     local spec, source = addon.itemUpgrades:GetActiveSpecSource()
     self.frame.source:SetText(format(L("Weights: %s (%s)"),
         tostring(spec or L("unavailable")), tostring(source or L("unknown"))))
-    local entries = self:BuildRows()
-    self.entries = entries
+    local entries = self.entries or {}
     local offset = FauxScrollFrame_GetOffset(self.frame.scroll)
     FauxScrollFrame_Update(self.frame.scroll, #entries, MAX_ROWS, 32)
     for index, row in ipairs(self.frame.rows) do
@@ -181,6 +196,12 @@ function advisor:Equip(entry)
             bag = entry.bag, bagSlot = entry.slot, itemLink = entry.link
         })
     elseif entry.choice then
+        -- Painting can reuse old entries; selection must still belong to the
+        -- currently displayed reward, not a previous quest's choice index.
+        if GetQuestItemLink("choice", entry.choice) ~= entry.link then
+            self:Refresh()
+            return
+        end
         local button = _G.QuestInfo_GetRewardButton and
                            _G.QuestInfo_GetRewardButton(
                                _G.QuestInfoRewardsFrame, entry.choice)
@@ -188,7 +209,7 @@ function advisor:Equip(entry)
     elseif entry.auctionData and addon.itemUpgrades.AH then
         addon.itemUpgrades.AH:SearchForBuyoutItem(entry.auctionData)
     end
-    C_Timer.After(0.3, function() advisor:Refresh() end)
+    self:RequestRefresh(0.3)
 end
 
 function advisor:SetView(view)
@@ -273,7 +294,7 @@ function advisor:CreateFrame()
     frame.scroll:SetPoint("BOTTOMRIGHT", -25, 38)
     frame.scroll:SetScript("OnVerticalScroll", function(self, offset)
         FauxScrollFrame_OnVerticalScroll(self, offset, 32,
-                                         function() advisor:Refresh() end)
+                                         function() advisor:PaintRows() end)
     end)
     frame.auctionHint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     frame.auctionHint:SetPoint("CENTER", 0, 10)
@@ -292,6 +313,10 @@ function advisor:CreateFrame()
         end
     end)
     frame:SetScript("OnShow", function() advisor:Refresh() end)
+    frame:SetScript("OnHide", function()
+        addon.scheduler:Cancel(advisor, "refresh")
+        advisor.dataDirty = true
+    end)
     frame:Hide()
     self.frame = frame
     table.insert(_G.UISpecialFrames, "RXPGearAdvisor")
@@ -311,11 +336,11 @@ function advisor:Setup()
     for _, event in ipairs({"BAG_UPDATE", "BAG_UPDATE_DELAYED",
                              "PLAYER_EQUIPMENT_CHANGED",
                              "GET_ITEM_INFO_RECEIVED", "QUEST_COMPLETE",
-                             "QUEST_LOG_UPDATE", "PLAYER_TALENT_UPDATE",
+                             "QUEST_LOG_UPDATE", "PLAYER_LEVEL_UP", "PLAYER_TALENT_UPDATE",
                              "ACTIVE_TALENT_GROUP_CHANGED"}) do
         pcall(self.eventFrame.RegisterEvent, self.eventFrame, event)
     end
     self.eventFrame:SetScript("OnEvent", function()
-        C_Timer.After(0.15, function() advisor:Refresh() end)
+        advisor:RequestRefresh()
     end)
 end

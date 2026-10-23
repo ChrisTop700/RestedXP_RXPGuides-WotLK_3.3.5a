@@ -107,5 +107,8 @@ return function(root)
     u:SetEquipmentSlotLocked(1,false)
     assert(u:EquipBagUpgrade({bag=0,bagSlot=1,itemLink="better"}) and equipCalls==1,
         "Unlock did not restore explicit equip")
+    env.GetContainerItemLink=function() return "replacement" end
+    assert(not u:EquipBagUpgrade({bag=0,bagSlot=1,itemLink="better"}) and equipCalls==1,
+        "Stale recommendation equipped a changed bag slot")
     print("Equipment lock regressions passed: EP, slot swaps, paired hands, rings, session reset and junk protection.")
 end

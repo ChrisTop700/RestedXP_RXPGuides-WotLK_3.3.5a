@@ -65,6 +65,7 @@ local function SetTreeFrameLevel(frame, base, depth, root)
 end
 
 function manager:RefreshLayering()
+    if addon.PerfCount then addon.PerfCount("tool layering passes") end
     local compact = {}
     for _, frame in ipairs(self.layerOrder) do
         if frame and frame.GetName and self.frames[frame:GetName()] == frame then
@@ -80,8 +81,9 @@ function manager:RefreshLayering()
     end
 end
 
-function manager:BringToFront(frame)
+function manager:BringToFront(frame, force)
     if not frame then return end
+    if not force and self.layerOrder[#self.layerOrder] == frame then return end
     for index = #self.layerOrder, 1, -1 do
         if self.layerOrder[index] == frame then
             tremove(self.layerOrder, index)
@@ -426,7 +428,7 @@ function manager:Create(spec)
     frame:HookScript("OnShow", function(self)
         manager:SetEscapeClose(self, spec.closeOnEscape == true)
         manager:ApplyVisuals(self)
-        manager:BringToFront(self)
+        manager:BringToFront(self, true)
     end)
     frame:HookScript("OnEnter", function(self) manager:BringToFront(self) end)
     frame:HookScript("OnMouseDown", function(self)
@@ -493,6 +495,7 @@ function manager:AddScrollingText(frame, spec)
         self:SetVerticalScroll(Clamp(current - delta * 36, 0, maximum))
     end)
     UpdateLayout()
+    manager:RefreshLayering()
     return scroll, child, text
 end
 

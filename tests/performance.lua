@@ -55,6 +55,18 @@ return function(root)
     addon.PerfCount("untrusted unit name")
     assert(not next(inspector.counters))
 
+    for _, label in ipairs({"guide catalogue", "tool layering", "gear advisor scan", "equipment proficiency refresh"}) do
+        local started = assert(addon.PerfBegin(label))
+        clock = clock + 1
+        addon.PerfEnd(label, started)
+        assert(inspector.captureMetrics[label].calls == 1)
+    end
+    for _, counter in ipairs({"guide catalogue rebuilds", "tool layering passes", "gear advisor rebuilds", "equipment proficiency refreshes"}) do
+        addon.PerfCount(counter)
+        assert(inspector.counters[counter] == 1)
+    end
+    clock = 10
+
     local calls = 0
     local fixture = {run = function(...)
         calls = calls + 1
@@ -100,6 +112,9 @@ return function(root)
     inspector:ResetMetrics()
     assert(not inspector.captureMetrics and not inspector.captureUntil)
     assert(not addon.PerfBegin("row layout"))
+    for _, label in ipairs({"guide catalogue", "tool layering", "gear advisor scan", "equipment proficiency refresh"}) do
+        assert(not addon.PerfBegin(label), "refresh instrumentation is capture-only")
+    end
 
     inspector:StartCapture(5)
     inspector:Sample()

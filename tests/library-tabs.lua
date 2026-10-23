@@ -670,6 +670,44 @@ return function(root, baseObject, style)
     assert(masses.filled > masses.outline, "distinct outline and filled shapes")
     assert(readBinary("Textures/Tabler/LICENSE.txt"):find("MIT License", 1, true))
     assert(readBinary("Textures/Tabler/NOTICE.txt"):find("a4ce1404bc6d24d3c365afe7b258d6bf6f48d62d", 1, true))
+    local redraws, levels = 0, 0
+    local redraw, unitLevel = hub.RefreshRows, env.UnitLevel
+    hub.RefreshRows = function(self, ...) redraws = redraws + 1; return redraw(self, ...) end
+    env.UnitLevel = function(...) levels = levels + 1; return unitLevel(...) end
+    hub:RefreshFilter()
+    assert(redraws == 1 and levels == 1, "one redraw and player-level read per filter pass in " .. style)
+    hub.RefreshRows, env.UnitLevel = redraw, unitLevel
+    local manager = addon.toolWindows
+    local top = manager.layerOrder[#manager.layerOrder]
+    assert(top)
+    local writes, traversals = 0, 0
+    local setLevel, getChildren = top.SetFrameLevel, top.GetChildren
+    top.SetFrameLevel = function(self, ...) writes = writes + 1; return setLevel(self, ...) end
+    top.GetChildren = function(self, ...) traversals = traversals + 1; return getChildren(self, ...) end
+    for i = 1, 100 do manager:BringToFront(top) end
+    assert(writes == 0 and traversals == 0, "front-window requests cannot traverse descendants")
+    local late = object(nil, top)
+    manager:BringToFront(top, true)
+    assert(writes > 0 and traversals > 0 and late.rxpToolLayerHook, "forced refresh layers late controls")
+    top.SetFrameLevel, top.GetChildren = setLevel, getChildren
+    local scroll, scrollChild = manager:AddScrollingText(top)
+    assert(scroll.rxpToolLayerHook and scrollChild.rxpToolLayerHook, "new shared scroll content is layered immediately")
+    local onShowChild = object(nil, top)
+    top:Hide(); top:Show()
+    assert(onShowChild.rxpToolLayerHook, "opening an already-front window refreshes its new controls")
+    local pooled = object(nil, top); pooled.rxpPooledContent = true
+    local borrowed = object(nil, pooled)
+    manager:RefreshLayering()
+    assert(not borrowed.rxpToolLayerHook, "borrowed AceGUI descendants remain excluded")
+    if style == "modern" then
+        addon.libraryTabs:Open("Guides")
+        local rowCount, priorHeight = #hub.frame.rows, hub.frame.viewport:GetHeight()
+        hub.frame.viewport:SetHeight((rowCount + 3) * hub.frame.rowHeight)
+        addon.modernLibrary:Rows(hub)
+        assert(#hub.frame.rows > rowCount and hub.frame.rows[#hub.frame.rows].rxpToolLayerHook,
+            "growing the modern row pool layers new rows immediately")
+        hub.frame.viewport:SetHeight(priorHeight)
+    end
     print("Unified library: production options and bundled renderer passed")
     string.split = oldSplit
     if style == "modern" then assert(loadfile(root .. "/tests/library-tabs.lua"))()(root, baseObject, "legacy") end

@@ -143,13 +143,18 @@ return function(root)
     -- Exercise the production debounce callback: stale events cannot rebuild
     -- repeatedly, and skill-header events during scanning cannot recurse.
     local callbacks, refreshes = {}, 0
-    env.C_Timer={After=function(_, fn) callbacks[#callbacks+1]=fn end}
+    addon.timer={NewTimer=function(_, fn)
+        local handle={Cancel=function(self) self.cancelled=true end}
+        callbacks[#callbacks+1]=function() if not handle.cancelled then fn() end end
+        return handle
+    end}
+    addon.services={Register=function() end}
+    setfenv(assert(loadfile(root .. "/Core/Scheduler.lua")),env)("RXPGuides",addon)
     env.RefreshWeaponProficiencies=function() refreshes=refreshes+1 end
     env.InvalidateUpgradeDetailTooltip=function() end
     env.QueueUpgradeScan=function() end
     addon.SendEvent=function() end
     session.promptedUpgrades={}
-    session.proficiencyRefreshSerial=0
     local eventSource=section("function addon.itemUpgrades:WEAPON_PROFICIENCY_CHANGED()",
         "function addon.itemUpgrades:LoadStatWeights()")
     setfenv(assert(loadstring(eventSource)),env)()

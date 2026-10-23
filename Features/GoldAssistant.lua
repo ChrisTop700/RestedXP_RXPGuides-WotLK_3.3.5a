@@ -530,7 +530,21 @@ function gold:Setup()
     self:OnGuideLoaded(addon.currentGuide)
 end
 
-function gold:ProfessionsChanged()
+function gold:ProfessionsChanged(event)
+    if event == "SKILL_LINES_CHANGED" then
+        if not addon.scheduler:Has(self, "professions") then
+            addon.scheduler:After(self, "professions", 0.15, function()
+                -- Mode may have changed while the skill burst was settling.
+                if RXPCData and RXPCData.GA then
+                    self:ProfessionsChanged("settled")
+                else
+                    self:Refresh()
+                end
+            end)
+        end
+        return
+    end
+    addon.scheduler:Cancel(self, "professions")
     if addon.RXPFrame and addon.RXPFrame.GenerateMenuTable then
         addon.RXPFrame.GenerateMenuTable()
     end
