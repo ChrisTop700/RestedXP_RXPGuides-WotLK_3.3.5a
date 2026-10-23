@@ -8,7 +8,8 @@ return function(root)
     local chunk = assert(loadstring("local addon = ...\n" .. source:sub(first, last - 1)))
     local calls, labels, counts = {}, {}, {}
     local addon = {
-        currentGuide = {},
+        currentGuide = {steps = {}},
+        scheduler = {Cancel = function() end},
         settings = {
             profile = {
                 numMapPins = 5,
@@ -24,14 +25,19 @@ return function(root)
         }
     }
     local env = setmetatable({}, {__index = _G})
-    -- The UpdateMap coordinator reads _G.WorldMapFrame:IsShown() to decide
-    -- whether the full map pipeline (world/minimap pins) should run.  On a
-    -- headless CI runner the real frame is absent.  Supply a stub that
-    -- reports the map as open so the test exercises the full path.
-    env._G = setmetatable({WorldMapFrame = {IsShown = function() return true end}}, {__index = _G})
+    -- Exercise immediate artwork rendering here; map-lifecycle.lua also
+    -- covers closed-map navigation and deferred rendering on opening.
+    local canvas = {GetWidth = function() return 800 end, GetHeight = function() return 600 end,
+        GetEffectiveScale = function() return 1 end, GetFrameStrata = function() return "HIGH" end,
+        GetFrameLevel = function() return 5 end}
+    env._G = setmetatable({WorldMapFrame = {
+        IsShown = function() return true end, GetCanvas = function() return canvas end,
+    }}, {__index = _G})
+    env.RXPCData = {currentStep = 1}
     local function append(name) calls[#calls + 1] = name end
     env.resetMap = function() addon.updateMap = false; append("reset") end
     env.addWorldMapLines = function() append("lines") end
+    env.generatePins = function() append("pins"); return {} end
     env.addWorldMapPins = function() append("world") end
     env.addMiniMapPins = function() append("mini") end
     env.updateArrowData = function() append("arrow") end
@@ -45,7 +51,7 @@ return function(root)
     addon.UpdateMap()
     assert(addon.updateMap and #calls == 0, "dirty request rebuilt the map synchronously")
     addon.UpdateMap(true)
-    local expected = "reset,lines,world,mini,arrow,visible"
+    local expected = "reset,lines,pins,world,mini,arrow,visible"
     assert(table.concat(calls, ",") == expected and not addon.updateMap)
     assert(table.concat(labels, ",") ==
         "map reset,map lines,map world pins,map minimap pins,map arrow,map visibility")
@@ -53,8 +59,10 @@ return function(root)
     calls = {}
     addon.currentGuide = nil
     addon.UpdateMap(true)
-    assert(#calls == 0 and counts["map rebuilds"] == 1)
-    addon.currentGuide, addon.PerfInvoke, addon.PerfCount = {}, nil, nil
+    assert(table.concat(calls, ",") == "reset" and counts["map rebuilds"] == 1,
+        "removed guide retained registrations")
+    calls = {}
+    addon.currentGuide, addon.PerfInvoke, addon.PerfCount = {steps = {}}, nil, nil
     addon.UpdateMap(true)
     assert(table.concat(calls, ",") == expected, "map behavior depends on the profiler")
     print("Map instrumentation preserved rebuild order and deferred dirty requests.")

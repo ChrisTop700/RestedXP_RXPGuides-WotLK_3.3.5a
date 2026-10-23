@@ -608,7 +608,8 @@ MapLinePool.creationFunc = function(framePool)
         if batchBorder then lborder:__RXPEndUpdate() end
 
         self:SetParent(canvas)
-        self:SetFrameStrata(canvas:GetFrameStrata())
+        self.renderStrata = canvas:GetFrameStrata()
+        self:SetFrameStrata(self.renderStrata)
         self:SetFrameLevel(2010)
         --self:SetFrameStrata("FULLSCREEN_DIALOG")
         -- self:SetFrameLevel(3000)
@@ -1028,16 +1029,11 @@ local function generateLines(steps, numPins, startingIndex, isMiniMap)
     return pins
 end
 
--- Generate pins using the current guide's steps, then add the pins to the world map
-local function addWorldMapPins()
-    -- Calculate which pins should be on the world map
-    local configuredPins = math.max(0, tonumber(
-        addon.settings.profile.numMapPins) or 0)
-    local pins = generatePins(addon.currentGuide.steps, configuredPins,
-                              RXPCData.currentStep, false)
-
-    -- A zero pin preference hides world-map artwork, not navigation. Generating
-    -- the active set above is still required by the independent arrow feature.
+-- Materialize already-generated descriptors. Opening the map must not replay
+-- generatePins: it also restores waypoint state and populates navigation.
+local function addWorldMapPins(pins, configuredPins)
+    -- A zero pin preference hides world-map artwork, not navigation. The
+    -- descriptors were already generated for the independent arrow feature.
     if configuredPins == 0 then return end
 
     -- Convert each "pin" data structure into a WoW frame. Then add that frame to the world map
@@ -1506,42 +1502,87 @@ local function resetMap()
 end
 
 local lastMap
+local mapPresentationOwner = {}
+local mapPresentationFrame
+local mapGeneration = 0
+local preparedWorldPins
+
+local function CancelMapPresentation()
+    addon.scheduler:Cancel(mapPresentationOwner, "present")
+    if mapPresentationFrame then mapPresentationFrame:SetScript("OnUpdate", nil) end
+end
+
 local function MeasureMapStage(label, callback, ...)
     if addon.PerfInvoke then return addon.PerfInvoke(label, callback, ...) end
     return callback(...)
 end
 
+local function WorldMapReady()
+    local map = _G.WorldMapFrame
+    if not map or not map:IsShown() then return false end
+    local canvas = map:GetCanvas()
+    return canvas and canvas:GetWidth() > 0 and canvas:GetHeight() > 0
+end
+
+local function RenderPreparedWorldPins()
+    local prepared = preparedWorldPins
+    if not prepared or
+        prepared.generation ~= mapGeneration or
+        prepared.guide ~= addon.currentGuide or
+        prepared.step ~= RXPCData.currentStep or not WorldMapReady() then
+        return
+    end
+    local canvas = _G.WorldMapFrame:GetCanvas()
+    local width, height = canvas:GetWidth(), canvas:GetHeight()
+    local scale = canvas:GetEffectiveScale()
+    local strata, level = canvas:GetFrameStrata(), canvas:GetFrameLevel()
+    if not prepared.rendered then
+        MeasureMapStage("map world pins", addWorldMapPins, prepared.pins,
+                        prepared.configuredPins)
+    elseif prepared.placementPending or prepared.canvas ~= canvas or prepared.width ~= width or
+        prepared.height ~= height or prepared.scale ~= scale or
+        prepared.strata ~= strata or prepared.level ~= level then
+        -- Reopening can leave registered icons hidden after closed-map updates,
+        -- even when the full-map canvas has exactly the same geometry.
+        -- The full-map toggle can also change strata without changing zones.
+        -- Re-anchor this owner's existing icons and refresh their explicit
+        -- layers; never unregister pins or rebuild navigation for a resize.
+        if HBDPins.RefreshWorldMapIcons then
+            HBDPins:RefreshWorldMapIcons(addon)
+        end
+    end
+    prepared.canvas, prepared.width, prepared.height = canvas, width, height
+    prepared.scale, prepared.strata, prepared.level = scale, strata, level
+    prepared.rendered = true
+    prepared.placementPending = nil
+end
+
 function addon.UpdateMap(resetPins)
     if resetPins then
-        -- Skip expensive map rebuild when world map is not visible
-        -- But still build waypoints for arrow navigation
-        local showMap = _G.WorldMapFrame and _G.WorldMapFrame:IsShown()
-        if not showMap then
-            -- Rebuild pins/lines but don't add to world map frames
-            -- This ensures addon.activeWaypoints is populated for arrow navigation
-            if addon.currentGuide == nil then return end
-            resetMap()
-            addWorldMapLines()
-            -- Populate activeWaypoints directly (isMiniMap=false) without adding world-map frames
-            generatePins(addon.currentGuide.steps, addon.settings.profile.numMapPins, RXPCData.currentStep, false)
-            MeasureMapStage("map arrow", updateArrowData)
-            MeasureMapStage("map visibility", addon.DisplayLines, true)
-            return
-        end
-        if addon.currentGuide == nil then return end
+        CancelMapPresentation()
+        mapGeneration = mapGeneration + 1
+        preparedWorldPins = nil
         lastMap = nil
-        if addon.PerfCount then addon.PerfCount("map rebuilds") end
         MeasureMapStage("map reset", resetMap)
+        if not addon.currentGuide then return end
+        if addon.PerfCount then addon.PerfCount("map rebuilds") end
+        -- Lines create center pins and arrow waypoints; preserve this ordering.
         MeasureMapStage("map lines", addWorldMapLines)
-        MeasureMapStage("map world pins", addWorldMapPins)
+        local configuredPins = math.max(0, tonumber(
+            addon.settings.profile.numMapPins) or 0)
+        preparedWorldPins = {
+            guide = addon.currentGuide, step = RXPCData.currentStep,
+            generation = mapGeneration, configuredPins = configuredPins,
+            pins = generatePins(addon.currentGuide.steps, configuredPins,
+                                RXPCData.currentStep, false),
+        }
+        RenderPreparedWorldPins()
+        -- Minimap/navigation remain live even with the world map closed.
         MeasureMapStage("map minimap pins", addMiniMapPins)
         MeasureMapStage("map arrow", updateArrowData)
         MeasureMapStage("map visibility", addon.DisplayLines, true)
     else
         addon.updateMap = true
-        --[[if GetTime() - gt > 10 then
-            error('ok')
-        end]]
     end
 end
 
@@ -1553,9 +1594,16 @@ local function DisplayLines(self)
         local canvas = _G.WorldMapFrame:GetCanvas()
         local width = canvas and canvas:GetWidth() or 0
         local height = canvas and canvas:GetHeight() or 0
+        local canvasStrata = canvas and canvas:GetFrameStrata()
         local currentStep = addon.currentGuide and addon.currentGuide.steps and
                                 addon.currentGuide.steps[RXPCData.currentStep]
         for line in lineMapFramePool:EnumerateActive() do
+            -- Scale-only/fullscreen transitions may leave the geometry intact
+            -- but put a frame with an explicit old strata behind the map art.
+            if canvasStrata and line.renderStrata ~= canvasStrata then
+                line:SetFrameStrata(canvasStrata)
+                line.renderStrata = canvasStrata
+            end
             if line.lineData and width > 0 and
                 height > 0 and
                 (line.pendingLineRender or line.renderWidth ~= width or
@@ -1574,27 +1622,72 @@ local function DisplayLines(self)
 end
 addon.DisplayLines = DisplayLines
 
-hooksecurefunc(_G.WorldMapFrame, "OnMapChanged", DisplayLines);
+local function PresentMap()
+    -- Either driver can win, but only one may consume this request. The map
+    -- driver is a one-shot, not a permanent polling loop.
+    CancelMapPresentation()
+    if not WorldMapReady() then return end
+    -- HBD's WORLD_MAP_UPDATE refresh uses the same paused timer driver. While
+    -- fullscreen hides UIParent, cover zone changes here for our owner only.
+    if preparedWorldPins and _G.UIParent and not _G.UIParent:IsVisible() then
+        preparedWorldPins.placementPending = true
+    end
+    -- Read the latest generation, not a descriptor list captured when queued.
+    -- Consume existing dirty work once so the regular ticker cannot repeat it.
+    if addon.updateMap or (preparedWorldPins and
+        (preparedWorldPins.guide ~= addon.currentGuide or
+         preparedWorldPins.step ~= RXPCData.currentStep)) then
+        addon.UpdateMap(true)
+        return
+    end
+    RenderPreparedWorldPins()
+    MeasureMapStage("map visibility", DisplayLines, true)
+end
 
--- 3.3.5a never calls WorldMapFrame:OnMapChanged (it is a Compat335 no-op), so the
--- hook above never fires and line visibility would be frozen at whatever map was
--- in view when the step last changed. WORLD_MAP_UPDATE is the client's real
--- "map view changed" signal (it also drives the HBD pin re-placement), so mirror
--- the hook onto it. The active-line set is small, so force a re-evaluation on
--- every event rather than trusting the lastMap throttle (which can be stale when
--- a step changed while the map was closed, freezing lines hidden).
+local function RequestMapPresentation()
+    if not _G.WorldMapFrame:IsShown() or
+        addon.scheduler:Has(mapPresentationOwner, "present") then return end
+    -- The legacy fullscreen map can hide UIParent, suspending its private
+    -- timer driver. Keep a map-owned next-frame fallback so presentation can
+    -- finish while that driver is hidden, including when UIParent is hidden
+    -- after this request. Do not change shared timer/scheduler semantics.
+    if not mapPresentationFrame then
+        mapPresentationFrame = CreateFrame("Frame", nil, _G.WorldMapFrame)
+    end
+    mapPresentationFrame:SetScript("OnUpdate", PresentMap)
+    addon.scheduler:After(mapPresentationOwner, "present", 0, PresentMap)
+end
+
+-- One next-cycle callback covers opening and legacy map-event bursts. HBD still
+-- owns placement of registered pins when changing the viewed zone. Reopening
+-- an unchanged map never regenerates route data or recreates pin frames.
+hooksecurefunc(_G.WorldMapFrame, "OnMapChanged", RequestMapPresentation)
+_G.WorldMapFrame:HookScript("OnShow", function()
+    -- Keep the descriptors and frames; invalidate only their placement. Let the
+    -- existing next-cycle callback wait for the opening map layout to settle.
+    if preparedWorldPins then preparedWorldPins.placementPending = true end
+    RequestMapPresentation()
+end)
+_G.WorldMapFrame:HookScript("OnHide", function()
+    CancelMapPresentation()
+end)
+local function HookMapLayout(frame)
+    if not frame then return end
+    frame:HookScript("OnSizeChanged", RequestMapPresentation)
+    -- Changing scale/parent/strata alone need not emit OnSizeChanged. Observe
+    -- only these map frames, without overriding client functions or polling.
+    for _, method in ipairs({"SetScale", "SetFrameStrata", "SetFrameLevel", "SetParent"}) do
+        if type(frame[method]) == "function" then
+            hooksecurefunc(frame, method, RequestMapPresentation)
+        end
+    end
+end
+HookMapLayout(_G.WorldMapFrame)
+local mapCanvas = _G.WorldMapFrame:GetCanvas()
+if mapCanvas ~= _G.WorldMapFrame then HookMapLayout(mapCanvas) end
 local lineMapWatcher = CreateFrame("Frame")
 lineMapWatcher:RegisterEvent("WORLD_MAP_UPDATE")
-lineMapWatcher:SetScript("OnEvent", function()
-    -- WORLD_MAP_UPDATE arrives in bursts while the legacy map changes
-    -- detail textures. One next-frame refresh covers the complete burst.
-    if lineMapWatcher.refreshPending then return end
-    lineMapWatcher.refreshPending = true
-    C_Timer.After(0, function()
-            lineMapWatcher.refreshPending = nil
-            DisplayLines(true)
-        end)
-    end)
+lineMapWatcher:SetScript("OnEvent", RequestMapPresentation)
 
 function addon.RefreshNavigationLanguage()
     af.distance = nil
