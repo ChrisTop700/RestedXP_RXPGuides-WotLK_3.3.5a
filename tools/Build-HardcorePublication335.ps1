@@ -8,8 +8,11 @@ $lua=Resolve-HardcoreLua335 $LuaCommand
 $out=[IO.Path]::GetFullPath($OutputRoot)
 if(Test-Path -LiteralPath $out){throw 'Use a new output directory; preserve previous evidence.'}
 $inputs=Join-Path $hardcoreRoot $hardcoreInputs
-$work='build/hardcore-publication-'+[Guid]::NewGuid().ToString('N')
-[IO.Directory]::CreateDirectory((Join-Path $hardcoreRoot $work)) | Out-Null
+. (Join-Path $hardcoreRoot 'tools/Validation-Scratch335.ps1')
+$ownedScratch=New-ValidationScratch335 $hardcoreRoot 'hardcore-publication'
+$work='build/'+[IO.Path]::GetFileName($ownedScratch.Path)
+$scratchSucceeded=$false
+
 Push-Location -LiteralPath $hardcoreRoot
 try {
     & (Join-Path $PSScriptRoot 'Build-HardcoreUpstream335.ps1') -SourceRoot $SourceRoot -OutputRoot "$work/upstream" -RecipePath "$inputs/upstream.json"
@@ -60,4 +63,8 @@ try {
     foreach($file in $hardcoreOutputs.Values){[IO.File]::WriteAllBytes((Join-Path $out $file),[IO.File]::ReadAllBytes("$work/published/$file"))}
     [IO.File]::WriteAllText((Join-Path $out 'receipt.json'),(ConvertTo-HardcoreJson335 $receipt)+"`n",$hardcoreUtf8)
     Write-Output 'Generated experimentally publishable outputs; manifest unchanged and gameplay acceptance still required.'
-} finally {Pop-Location}
+    $scratchSucceeded=$true
+} finally {
+    Pop-Location
+    Complete-ValidationScratch335 $ownedScratch $scratchSucceeded
+}

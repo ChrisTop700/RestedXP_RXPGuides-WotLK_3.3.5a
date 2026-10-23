@@ -56,6 +56,7 @@ try {
         & "$PSScriptRoot/Validate-Roadmap335.ps1"
         & "$PSScriptRoot/Validate-Privacy335.ps1"
         & "$root/tests/release-archive.ps1"
+        & "$root/tests/validation-scratch.ps1"
         & "$root/tests/validation-runner.ps1"
     } elseif ($Suite -eq 'quest-flow') {
         & "$PSScriptRoot/Validate-QuestFlow335.ps1"

@@ -9,3 +9,73 @@
 
 # Preserve runtime folders, bundled assets/licenses, and user documentation.
 # Optional locale ZIPs are built separately from the pinned locale checkout.
+
+# Reviewed dormant inputs/assets; see packaging/release-exclusions.txt.
+"/Fonts/BerlinSansFBDemi-Bold_wide5.ttf" export-ignore
+"/Guides/Classic-0.5.lua" export-ignore
+"/Guides/Classic-Alliance-1-10_NightElf.lua" export-ignore
+"/Guides/Classic-Alliance-11-20.lua" export-ignore
+"/Guides/Classic-Alliance-1-13_Human.lua" export-ignore
+"/Guides/Classic-Alliance-1-14_DwarfGnome.lua" export-ignore
+"/Guides/Classic-Alliance-ADV-AoE-Mage-1-22.lua" export-ignore
+"/Guides/Classic-Alliance-Mage-1-12.lua" export-ignore
+"/Guides/Classic-Alliance-Mage-12-21.lua" export-ignore
+"/Guides/Classic-Attunements.lua" export-ignore
+"/Guides/Classic-Horde-01-12_Durotar.lua" export-ignore
+"/Guides/Classic-Horde-01-14_Undead.lua" export-ignore
+"/Guides/Classic-Horde-1-12_Mulgore.lua" export-ignore
+"/Guides/Classic-Horde-12-22_Barrens.lua" export-ignore
+"/Guides/Classic-Horde-Mage-12-21.lua" export-ignore
+"/Guides/Dailies/Cataclysm/Molten Front.lua" export-ignore
+"/Guides/Dailies/Cataclysm/Tol Barad Daily Quests.lua" export-ignore
+"/Guides/SurvivalGuide/A-Classic-Alliance-1-10_NightElf.lua" export-ignore
+"/Guides/SurvivalGuide/A-Classic-Alliance-11-16_NightElf.lua" export-ignore
+"/Guides/SurvivalGuide/A-Classic-Alliance-11-20.lua" export-ignore
+"/Guides/SurvivalGuide/A-Classic-Alliance-1-13_Human.lua" export-ignore
+"/Guides/SurvivalGuide/A-Classic-Alliance-1-14_DwarfGnome.lua" export-ignore
+"/Guides/SurvivalGuide/A-Hardcore-18-19 Loch Modan.lua" export-ignore
+"/Guides/SurvivalGuide/A-Hardcore-19-20 Redridge.lua" export-ignore
+"/Guides/SurvivalGuide/H-Classic-Horde-01-13_Durotar.lua" export-ignore
+"/Guides/SurvivalGuide/H-Classic-Horde-01-13_Undead.lua" export-ignore
+"/Guides/SurvivalGuide/H-Classic-Horde-1-13_Mulgore.lua" export-ignore
+"/Guides/SurvivalGuide/H-Classic-Horde-13-15_Silverpine.lua" export-ignore
+"/Guides/SurvivalGuide/H-Classic-Horde-15-23_Barrens.lua" export-ignore
+"/Guides/Talents/classic-druid.lua" export-ignore
+"/Guides/Talents/classic-hunter.lua" export-ignore
+"/Guides/Talents/classic-mage.lua" export-ignore
+"/Guides/Talents/classic-paladin.lua" export-ignore
+"/Guides/Talents/classic-priest.lua" export-ignore
+"/Guides/Talents/classic-rogue.lua" export-ignore
+"/Guides/Talents/classic-shaman.lua" export-ignore
+"/Guides/Talents/classic-warlock.lua" export-ignore
+"/Guides/Talents/classic-warrior.lua" export-ignore
+"/Guides/Talents/tbc-druid.lua" export-ignore
+"/Guides/Talents/tbc-hunter.lua" export-ignore
+"/Guides/Talents/tbc-mage.lua" export-ignore
+"/Guides/Talents/tbc-paladin.lua" export-ignore
+"/Guides/Talents/tbc-priest.lua" export-ignore
+"/Guides/Talents/tbc-rogue.lua" export-ignore
+"/Guides/Talents/tbc-shaman.lua" export-ignore
+"/Guides/Talents/tbc-warlock.lua" export-ignore
+"/Guides/Talents/tbc-warrior.lua" export-ignore
+"/Textures/DarkMode/CLASS_ICONS.psd" export-ignore
+"/Textures/DarkMode/PRIEST.png" export-ignore
+"/Textures/DarkMode/rxp-btn-blank-32.png" export-ignore
+"/Textures/DungeonIcons/blackfathomdeeps.blp" export-ignore
+"/Textures/DungeonIcons/blackfathomdeeps.tga" export-ignore
+"/Textures/DungeonIcons/deadmines.tga" export-ignore
+"/Textures/DungeonIcons/gnomeregan.tga" export-ignore
+"/Textures/DungeonIcons/maraudon.tga" export-ignore
+"/Textures/DungeonIcons/razorfendowns.tga" export-ignore
+"/Textures/DungeonIcons/razorfenkraul.tga" export-ignore
+"/Textures/DungeonIcons/scarletmonastery.tga" export-ignore
+"/Textures/DungeonIcons/shadowfangkeep.tga" export-ignore
+"/Textures/DungeonIcons/stockade.tga" export-ignore
+"/Textures/DungeonIcons/sunkentemple.tga" export-ignore
+"/Textures/DungeonIcons/uldaman.tga" export-ignore
+"/Textures/DungeonIcons/wailingcaverns.blp" export-ignore
+"/Textures/DungeonIcons/wailingcaverns.tga" export-ignore
+"/Textures/DungeonIcons/zulfarrak.tga" export-ignore
+"/Textures/Hardcore/intro_ui.tga" export-ignore
+"/Textures/transparent_paper.blp" export-ignore
+"/UI/HardcoreIntro.lua" export-ignore

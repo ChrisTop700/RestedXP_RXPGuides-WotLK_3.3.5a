@@ -7,8 +7,11 @@ if(-not $ReceiptPath){$ReceiptPath=Join-Path $hardcoreRoot 'tools/data/Hardcore-
 $validate=Join-Path $hardcoreRoot 'tools/Validate-HardcorePublication335.ps1'
 & $validate -GuideRoot $GuideRoot -ReceiptPath $ReceiptPath -IntegrityOnly
 $source=Get-Content -LiteralPath $ReceiptPath -Raw
-$scratch=Join-Path $hardcoreRoot ('build/hardcore-receipt-regressions-'+[Guid]::NewGuid().ToString('N'))
-[IO.Directory]::CreateDirectory($scratch) | Out-Null
+. (Join-Path $hardcoreRoot 'tools/Validation-Scratch335.ps1')
+$ownedScratch=New-ValidationScratch335 $hardcoreRoot 'hardcore-receipt-regressions'
+$scratch=$ownedScratch.Path
+$scratchSucceeded=$false
+try {
 [IO.File]::WriteAllText((Join-Path $scratch 'lf.txt'),"fixture`n",$hardcoreUtf8)
 [IO.File]::WriteAllText((Join-Path $scratch 'crlf.txt'),"fixture`r`n",$hardcoreUtf8)
 if((Get-HardcoreTextHash335 (Join-Path $scratch 'lf.txt')) -cne (Get-HardcoreTextHash335 (Join-Path $scratch 'crlf.txt'))){
@@ -40,3 +43,5 @@ foreach($mutate in $mutations){
     $count++
 }
 Write-Output "Publication receipt regressions passed: $count corrupt/stale/foreign receipts rejected."
+    $scratchSucceeded=$true
+} finally { Complete-ValidationScratch335 $ownedScratch $scratchSucceeded }

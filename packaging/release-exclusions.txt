@@ -1,0 +1,71 @@
+# Reviewed player-release exclusions; sources remain tracked for regeneration.
+# Exact repository-relative paths only. Keep matching .gitattributes rules.
+# Dormant guides are outside TOC/XML; intro assets belong to unloaded Classic UI.
+Fonts/BerlinSansFBDemi-Bold_wide5.ttf
+Guides/Classic-0.5.lua
+Guides/Classic-Alliance-1-10_NightElf.lua
+Guides/Classic-Alliance-11-20.lua
+Guides/Classic-Alliance-1-13_Human.lua
+Guides/Classic-Alliance-1-14_DwarfGnome.lua
+Guides/Classic-Alliance-ADV-AoE-Mage-1-22.lua
+Guides/Classic-Alliance-Mage-1-12.lua
+Guides/Classic-Alliance-Mage-12-21.lua
+Guides/Classic-Attunements.lua
+Guides/Classic-Horde-01-12_Durotar.lua
+Guides/Classic-Horde-01-14_Undead.lua
+Guides/Classic-Horde-1-12_Mulgore.lua
+Guides/Classic-Horde-12-22_Barrens.lua
+Guides/Classic-Horde-Mage-12-21.lua
+Guides/Dailies/Cataclysm/Molten Front.lua
+Guides/Dailies/Cataclysm/Tol Barad Daily Quests.lua
+Guides/SurvivalGuide/A-Classic-Alliance-1-10_NightElf.lua
+Guides/SurvivalGuide/A-Classic-Alliance-11-16_NightElf.lua
+Guides/SurvivalGuide/A-Classic-Alliance-11-20.lua
+Guides/SurvivalGuide/A-Classic-Alliance-1-13_Human.lua
+Guides/SurvivalGuide/A-Classic-Alliance-1-14_DwarfGnome.lua
+Guides/SurvivalGuide/A-Hardcore-18-19 Loch Modan.lua
+Guides/SurvivalGuide/A-Hardcore-19-20 Redridge.lua
+Guides/SurvivalGuide/H-Classic-Horde-01-13_Durotar.lua
+Guides/SurvivalGuide/H-Classic-Horde-01-13_Undead.lua
+Guides/SurvivalGuide/H-Classic-Horde-1-13_Mulgore.lua
+Guides/SurvivalGuide/H-Classic-Horde-13-15_Silverpine.lua
+Guides/SurvivalGuide/H-Classic-Horde-15-23_Barrens.lua
+Guides/Talents/classic-druid.lua
+Guides/Talents/classic-hunter.lua
+Guides/Talents/classic-mage.lua
+Guides/Talents/classic-paladin.lua
+Guides/Talents/classic-priest.lua
+Guides/Talents/classic-rogue.lua
+Guides/Talents/classic-shaman.lua
+Guides/Talents/classic-warlock.lua
+Guides/Talents/classic-warrior.lua
+Guides/Talents/tbc-druid.lua
+Guides/Talents/tbc-hunter.lua
+Guides/Talents/tbc-mage.lua
+Guides/Talents/tbc-paladin.lua
+Guides/Talents/tbc-priest.lua
+Guides/Talents/tbc-rogue.lua
+Guides/Talents/tbc-shaman.lua
+Guides/Talents/tbc-warlock.lua
+Guides/Talents/tbc-warrior.lua
+Textures/DarkMode/CLASS_ICONS.psd
+Textures/DarkMode/PRIEST.png
+Textures/DarkMode/rxp-btn-blank-32.png
+Textures/DungeonIcons/blackfathomdeeps.blp
+Textures/DungeonIcons/blackfathomdeeps.tga
+Textures/DungeonIcons/deadmines.tga
+Textures/DungeonIcons/gnomeregan.tga
+Textures/DungeonIcons/maraudon.tga
+Textures/DungeonIcons/razorfendowns.tga
+Textures/DungeonIcons/razorfenkraul.tga
+Textures/DungeonIcons/scarletmonastery.tga
+Textures/DungeonIcons/shadowfangkeep.tga
+Textures/DungeonIcons/stockade.tga
+Textures/DungeonIcons/sunkentemple.tga
+Textures/DungeonIcons/uldaman.tga
+Textures/DungeonIcons/wailingcaverns.blp
+Textures/DungeonIcons/wailingcaverns.tga
+Textures/DungeonIcons/zulfarrak.tga
+Textures/Hardcore/intro_ui.tga
+Textures/transparent_paper.blp
+UI/HardcoreIntro.lua

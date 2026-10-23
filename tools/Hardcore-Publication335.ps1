@@ -6,7 +6,7 @@ $hardcoreOutputs=[ordered]@{classic='Hardcore-Classic.lua';tbc='Hardcore-TBC.lua
 function Get-HardcorePublicationDependencies335 {
     $paths=[Collections.Generic.List[string]]::new()
     foreach($path in @('tools/Build-HardcoreGuides335.ps1','tools/Build-HardcoreUpstream335.ps1',
-        'tools/Build-HardcorePublication335.ps1','tools/Hardcore-Publication335.ps1',
+        'tools/Build-HardcorePublication335.ps1','tools/Hardcore-Publication335.ps1','tools/Validation-Scratch335.ps1',
         'tools/Validate-HardcorePublication335.ps1','tools/Validate-HardcoreQuestFlow335.ps1',
         'tools/Test-HardcorePublicationContent335.ps1','tools/Validate-Guides335.ps1',
         'tools/data/Hardcore-PublicationBaseline335.json',

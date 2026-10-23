@@ -1,6 +1,10 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$scratch=Join-Path $root ('build/hardcore-english-regression/'+[guid]::NewGuid().ToString('N'))
+. (Join-Path $root 'tools/Validation-Scratch335.ps1')
+$ownedScratch=New-ValidationScratch335 $root 'hardcore-english-regression'
+$scratch=$ownedScratch.Path
+$scratchSucceeded=$false
+try {
 $utf8=New-Object Text.UTF8Encoding($false)
 [IO.Directory]::CreateDirectory((Join-Path $scratch 'DB/wotlk')) | Out-Null
 [IO.Directory]::CreateDirectory((Join-Path $scratch 'Guides')) | Out-Null
@@ -34,3 +38,5 @@ foreach($id in @(2931,$fixture.items[0].id)){
     if(-not $rejected -or (Test-Path -LiteralPath $output)){throw 'Conflicting reviewed name was emitted.'}
 }
 Write-Output 'Full English regeneration passed: existing names, all pinned additions, deterministic output and conflict rejection without external references.'
+    $scratchSucceeded=$true
+} finally { Complete-ValidationScratch335 $ownedScratch $scratchSucceeded }

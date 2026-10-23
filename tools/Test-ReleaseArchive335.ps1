@@ -1,6 +1,7 @@
 param(
     [string]$ArchivePath,
-    [string]$Revision = 'HEAD'
+    [string]$Revision = 'HEAD',
+    [string]$ExclusionPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,13 +29,24 @@ if (-not $ArchivePath) {
 $ArchivePath = [IO.Path]::GetFullPath($ArchivePath)
 
 $runtimeFolders = '^(Compat|Core|DB|Features|Fonts|Guide|Guides|libs|locale|Textures|UI)/'
-$forbidden = '^(\.git(?:/|$)|\.github/|\.gitattributes$|\.gitignore$|tools/|tests/|packaging/|build/|Hardcore_Workbench/|\.validation-cache/|LOCALIZATIONS\.lock$)'
+$forbidden = '^(\.git(?:/|$)|\.github/|\.local/|\.gitattributes$|\.gitignore$|tools/|tests/|packaging/|build/|Hardcore_Workbench/|\.validation-cache/|LOCALIZATIONS\.lock$)'
 $requiredRoot = @('RXPGuides.toc', 'Bindings.xml', 'GuideList_335.xml',
     'Talents_wotlk_335.xml', 'LICENSE', 'README.md', 'FEATURES_335.md',
     'LOCALIZATION.md', 'CHANGELOG.md')
 $tracked = @(Invoke-ArchiveGit335 @('ls-tree', '-r', '--name-only', $Revision))
-$expected = @($tracked | Where-Object { $_ -cmatch $runtimeFolders -or $_ -cin $requiredRoot })
+$excluded = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+if (-not $ExclusionPath) { $ExclusionPath = Join-Path $root 'packaging/release-exclusions.txt' }
+foreach ($line in (Get-Content -LiteralPath $ExclusionPath)) {
+    $path = $line.Trim()
+    if (-not $path -or $path.StartsWith('#')) { continue }
+    if ($path -match '[\\*?\[\]:]' -or $path -match '(^|/)\.\.?(/|$)' -or
+        $path.StartsWith('/') -or $path -cnotin $tracked -or -not $excluded.Add($path)) {
+        throw "Invalid or duplicate release exclusion: $path"
+    }
+}
+$expected = @($tracked | Where-Object { ($_ -cmatch $runtimeFolders -or $_ -cin $requiredRoot) -and -not $excluded.Contains($_) })
 $zip = $null
+$validated = $false
 try {
     $zip = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
     $entries = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
@@ -77,6 +89,7 @@ try {
     }
     $loaded = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     function Read-ArchiveResource335([string]$Path) {
+        if ($excluded.Contains($Path)) { throw "Loaded resource cannot be excluded: $Path" }
         if (-not $entries.ContainsKey($Path)) { throw "Missing archive dependency: $Path" }
         if (-not $loaded.Add($Path) -or -not $Path.EndsWith('.xml')) { return }
         [xml]$xml = Read-ArchiveText335 $Path
@@ -95,10 +108,18 @@ try {
             Read-ArchiveResource335 (Resolve-ArchivePath335 '' $value)
         }
     }
-    Write-Host ("Release archive passed: {0} files, {1} manifest resources; runtime, assets, licenses and user docs preserved." -f
-        $entries.Count, $loaded.Count)
+    foreach ($path in $excluded) {
+        if ($entries.ContainsKey($path)) { throw "Excluded source/asset leaked: $path" }
+    }
+    $attributes = @(Invoke-ArchiveGit335 (@('check-attr', 'export-ignore', '--') + @($excluded)))
+    foreach ($path in $excluded) {
+        if (($path + ': export-ignore: set') -cnotin $attributes) { throw "Missing export-ignore rule: $path" }
+    }
+    Write-Host ("Release archive passed: {0} files, {1} manifest resources, {2} reviewed exclusions; runtime, assets, licenses and user docs preserved." -f
+        $entries.Count, $loaded.Count, $excluded.Count)
+    $validated = $true
 } finally {
     if ($zip) { $zip.Dispose() }
     # Only remove the uniquely named archive this invocation created itself.
-    if ($temporaryArchive -and [IO.File]::Exists($ArchivePath)) { [IO.File]::Delete($ArchivePath) }
+    if ($temporaryArchive -and $validated -and [IO.File]::Exists($ArchivePath)) { [IO.File]::Delete($ArchivePath) }
 }

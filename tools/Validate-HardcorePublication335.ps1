@@ -62,8 +62,11 @@ if($scripts.Count -ne 44 -or [IO.File]::ReadAllText((Join-Path $hardcoreRoot 'Co
     throw 'Publication manifest/cache version differs.'
 }
 $lua=Resolve-HardcoreLua335 $LuaCommand
-$work='build/hardcore-published-check-'+[Guid]::NewGuid().ToString('N')
-[IO.Directory]::CreateDirectory((Join-Path $hardcoreRoot $work)) | Out-Null
+. (Join-Path $hardcoreRoot 'tools/Validation-Scratch335.ps1')
+$ownedScratch=New-ValidationScratch335 $hardcoreRoot 'hardcore-published-check'
+$work='build/'+[IO.Path]::GetFileName($ownedScratch.Path)
+$scratchSucceeded=$false
+
 Push-Location -LiteralPath $hardcoreRoot
 try {
     Invoke-HardcoreLua335 $lua @('tests/hardcore-wrath-content.lua','.',$GuideRoot)
@@ -82,4 +85,8 @@ try {
     }
     if($actual.Count -ne 258){throw 'Missing actual runtime identity.'}
     Write-Output 'Hardcore publication passed: 258 experimental chapters; zero unresolved labels. Gameplay acceptance remains separate.'
-} finally {Pop-Location}
+    $scratchSucceeded=$true
+} finally {
+    Pop-Location
+    Complete-ValidationScratch335 $ownedScratch $scratchSucceeded
+}

@@ -1,7 +1,11 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $utf8=[Text.UTF8Encoding]::new($false)
-$scratch=Join-Path $root ('build/hardcore-preflight-regressions-'+[Guid]::NewGuid().ToString('N'))
+. (Join-Path $root 'tools/Validation-Scratch335.ps1')
+$ownedScratch=New-ValidationScratch335 $root 'hardcore-preflight-regressions'
+$scratch=$ownedScratch.Path
+$scratchSucceeded=$false
+try {
 $files=@('Hardcore-Classic.lua','Hardcore-TBC.lua','Hardcore-Curated.lua')
 # This fixture tests orchestration, not guide correctness. The real combined
 # validator is run separately on all candidates and remains the approval gate.
@@ -25,7 +29,7 @@ function Write-Fixture([string]$Path,[string]$Text){
 $cases=@('success','blocked','live-entries','missing-family','foreign-root','normal-inventory','foreign-live-entry')
 foreach($case in $cases){
     $fixture=Join-Path $scratch $case
-    foreach($script in @('Test-HardcorePublicationContent335.ps1','Hardcore-Publication335.ps1','Hardcore-Upstream335.ps1')){
+    foreach($script in @('Test-HardcorePublicationContent335.ps1','Hardcore-Publication335.ps1','Hardcore-Upstream335.ps1','Validation-Scratch335.ps1')){
         Write-Fixture (Join-Path $fixture "tools/$script") ([IO.File]::ReadAllText((Join-Path $root "tools/$script")))
     }
     Write-Fixture (Join-Path $fixture 'tools/Validate-Guides335.ps1') $validator
@@ -52,3 +56,5 @@ foreach($case in $cases){
     foreach($file in $before.Keys){if((Get-FileHash (Join-Path $fixture $file)).Hash -cne $before[$file]){throw 'Preflight modified live metadata.'}}
 }
 Write-Output 'Publication preflight regressions passed: seven isolated cases; compatibility failures propagate; live metadata unchanged.'
+    $scratchSucceeded=$true
+} finally { Complete-ValidationScratch335 $ownedScratch $scratchSucceeded }

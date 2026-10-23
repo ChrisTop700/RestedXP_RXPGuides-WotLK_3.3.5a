@@ -1,8 +1,10 @@
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $fixtureSource = Join-Path $PSScriptRoot 'fixtures/validation-runner'
-$buildRoot = [IO.Path]::GetFullPath((Join-Path $root 'build/validation-runner-tests'))
-$fixtureRoot = Join-Path $buildRoot ([Guid]::NewGuid().ToString('N'))
+. (Join-Path $root 'tools/Validation-Scratch335.ps1')
+$ownedScratch = New-ValidationScratch335 $root 'validation-runner-tests'
+$fixtureRoot = $ownedScratch.Path
+$scratchSucceeded = $false
 $toolRoot = Join-Path $fixtureRoot 'tools'
 $testRoot = Join-Path $fixtureRoot 'tests'
 $oldLog = $env:RXP_VALIDATION_FIXTURE_LOG
@@ -10,7 +12,7 @@ $oldFail = $env:RXP_VALIDATION_FIXTURE_FAIL
 $tools = @('Validate-Runtime335', 'Validate-GuideTranslations335', 'Validate-Talents335',
     'Validate-Roadmap335', 'Validate-Privacy335', 'Validate-QuestFlow335',
     'Validate-HardcorePublication335')
-$tests = @('release-archive', 'validation-runner', 'hardcore-upstream',
+$tests = @('release-archive', 'validation-scratch', 'validation-runner', 'hardcore-upstream',
     'hardcore-coordinates', 'hardcore-upstream-compatibility', 'hardcore-pets',
     'hardcore-racial', 'hardcore-warlock', 'hardcore-travel', 'hardcore-ferries',
     'hardcore-demons', 'hardcore-english-names', 'hardcore-publication-preflight',
@@ -76,22 +78,9 @@ try {
     Invoke-RunnerFixture335 'python-failure' 3 'python-override'
     Invoke-RunnerFixture335 'python-missing-exit' 3 'python-no-exit'
     Write-Host 'Validation runner passed: identical serial/parallel coverage, option forwarding, and five worker-failure cases.'
+    $scratchSucceeded = $true
 } finally {
     $env:RXP_VALIDATION_FIXTURE_LOG = $oldLog
     $env:RXP_VALIDATION_FIXTURE_FAIL = $oldFail
-    # Delete only our unique generated fixture, with literal file targets and
-    # non-recursive removal of verified empty directories under ignored build.
-    $resolved = [IO.Path]::GetFullPath($fixtureRoot)
-    if (-not $resolved.StartsWith($buildRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Refusing fixture cleanup outside its build directory.'
-    }
-    if ([IO.Directory]::Exists($resolved)) {
-        foreach ($file in [IO.Directory]::GetFiles($resolved, '*', [IO.SearchOption]::AllDirectories)) {
-            [IO.File]::Delete($file)
-        }
-        $directories = @([IO.Directory]::GetDirectories($resolved, '*', [IO.SearchOption]::AllDirectories)) |
-            Sort-Object Length -Descending
-        foreach ($directory in $directories) { [IO.Directory]::Delete($directory, $false) }
-        [IO.Directory]::Delete($resolved, $false)
-    }
+    Complete-ValidationScratch335 $ownedScratch $scratchSucceeded
 }

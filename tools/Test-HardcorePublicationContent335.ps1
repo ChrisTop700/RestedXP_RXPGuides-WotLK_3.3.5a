@@ -31,11 +31,16 @@ $baseline=Get-Content (Join-Path $hardcoreRoot 'tools/data/Hardcore-PublicationB
 if($baseline.schemaVersion -ne 1){throw 'Unknown candidate baseline schema.'}
 $surface=Get-Content (Join-Path $hardcoreRoot 'tests/runtime-surface.json') -Raw | ConvertFrom-Json
 foreach($key in @('guideFileCount','guideCount','guideStepCount','guideKeyHash')){$surface.$key=$baseline.$key}
-$work=Join-Path $hardcoreRoot ('build/hardcore-content-preflight-'+[Guid]::NewGuid().ToString('N'))
-[IO.Directory]::CreateDirectory($work) | Out-Null
+. (Join-Path $hardcoreRoot 'tools/Validation-Scratch335.ps1')
+$ownedScratch=New-ValidationScratch335 $hardcoreRoot 'hardcore-content-preflight'
+$work=$ownedScratch.Path
+$scratchSucceeded=$false
+try {
 $lines=@('<Ui>')+@($paths | ForEach-Object {'<Script file="'+[Security.SecurityElement]::Escape($_)+'"/>'})+@('</Ui>')
 [IO.File]::WriteAllText((Join-Path $work 'manifest.xml'),($lines -join "`n")+"`n",$hardcoreUtf8)
 [IO.File]::WriteAllText((Join-Path $work 'surface.json'),(ConvertTo-HardcoreJson335 $surface)+"`n",$hardcoreUtf8)
 & (Join-Path $PSScriptRoot 'Validate-Guides335.ps1') -ManifestPath (Join-Path $work 'manifest.xml') `
     -SurfacePath (Join-Path $work 'surface.json') -MaxErrors $MaxErrors
 Write-Output 'Combined candidate compatibility passed; this is not gameplay acceptance.'
+    $scratchSucceeded=$true
+} finally { Complete-ValidationScratch335 $ownedScratch $scratchSucceeded }
