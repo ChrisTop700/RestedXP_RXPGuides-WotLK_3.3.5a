@@ -84,6 +84,12 @@ RXPFrame.ScrollChild = ScrollChild
 RXPFrame.MenuFrame = MenuFrame
 
 function RXPFrame:UpdateVisuals()
+    if addon.presentation and addon.presentation:IsModern() then
+        -- Avoid reapplying the legacy backdrops/banners on each cosmetic pass.
+        addon.guideLayout:Invalidate()
+        addon.presentation:ApplyHUD()
+        return
+    end
     addon.guideLayout:Invalidate()
     BottomFrame:ClearBackdrop()
     BottomFrame:SetBackdrop(RXPFrame.backdrop.edge)
@@ -109,6 +115,7 @@ function RXPFrame:UpdateVisuals()
     GuideName.classIcon:SetTexture(addon.GetTexture(class))
     Footer.cog:SetNormalTexture(addon.GetTexture("rxp_cog-32"))
     RXPFrame.UpdateScrollBar()
+    if addon.presentation then addon.presentation:ApplyHUD() end
 end
 
 function addon.ReloadStep()
@@ -289,7 +296,9 @@ RXPFrame.OnMouseDown = function(self, button, resize)
     if resize or IsAltKeyDown() and
         not (addon.currentGuide and addon.currentGuide.hidewindow) then
         RXPFrame:StartSizing("BOTTOMRIGHT")
-        RXPFrame:SetScript("OnUpdate", RXPFrame.BottomFrame.UpdateFrame)
+        if not (addon.presentation and addon.presentation:IsModern()) then
+            RXPFrame:SetScript("OnUpdate", RXPFrame.BottomFrame.UpdateFrame)
+        end
         isResizing = true
     else
         RXPFrame:StartMoving()
@@ -299,25 +308,45 @@ end
 RXPFrame.OnMouseUp = function(self, button)
     RXPFrame:StopMovingOrSizing()
     if isResizing then
-        addon.settings.profile.frameHeight = RXPFrame:GetHeight()
-        addon.SetStep(RXPCData.currentStep)
+        if addon.presentation and addon.presentation:IsModern() then
+            if not addon.presentation:GetHUD().collapsed then
+                addon.presentation:SetHeight(RXPFrame:GetHeight())
+            end
+            addon.presentation:Invalidate()
+        else
+            addon.settings.profile.frameHeight = RXPFrame:GetHeight()
+            addon.SetStep(RXPCData.currentStep)
+        end
         RXPFrame:SetScript("OnUpdate", nil)
     end
     SetStepFrameAnchor()
-    addon.UpdateItemFrame()
+    if not (addon.presentation and addon.presentation:IsModern()) then addon.UpdateItemFrame() end
     isResizing = false
     addon.settings:SaveFramePositions()
 end
 
 RXPFrame:SetScript("OnMouseDown", RXPFrame.OnMouseDown)
 RXPFrame:SetScript("OnMouseUp", RXPFrame.OnMouseUp)
+RXPFrame:HookScript("OnSizeChanged", function()
+    if isResizing and addon.presentation and addon.presentation:IsModern() then
+        if not addon.presentation:GetHUD().collapsed then
+            addon.presentation:SetHeight(RXPFrame:GetHeight())
+        end
+        addon.presentation:Invalidate()
+    end
+end)
 RXPFrame:EnableMouse(1)
 
 local stepPos = {}
 local refreshScrollRange
 
-local lastScrollValue
+local scrollRequest = 0
+local followedGuide, followedStep, followedTarget
 local function GetStepScrollValue(n)
+    if addon.presentation and addon.presentation:IsModern() then
+        local maximum = math.max(0, (stepPos[0] or 0) - ScrollFrame:GetHeight())
+        return math.max(0, math.min(stepPos[n] or 0, maximum))
+    end
     if n == 1 or not stepPos[n] then return 0 end
     local total = tonumber(stepPos[0]) or 0
     local height = ScrollChild.f1 and ScrollChild.f1:GetHeight() or 0
@@ -327,28 +356,39 @@ local function GetStepScrollValue(n)
     return math.max(0, math.min(value, maximum))
 end
 
-function BottomFrame:StepScroll(n, suppressRetry)
-    local step = addon.currentGuide.steps[n]
+function BottomFrame:CancelScrollFollow(reset)
+    scrollRequest = scrollRequest + 1
+    addon.scheduler:Cancel(self, "step-scroll")
+    if reset then followedGuide, followedStep, followedTarget = nil, nil, nil end
+end
+
+function BottomFrame:StepScroll(n, suppressRetry, force)
+    local guide = addon.currentGuide
+    local step = guide and guide.steps and guide.steps[n]
     if not step or not IsFrameShown(nil,step) then
          return
     end
-    --[[for i, v in ipairs(BottomFrame.stepList) do
-        if v == n then
-            n = i
-            break
-        end
-    end]]
-    local value = GetStepScrollValue(n)
-    if refreshScrollRange then
-        refreshScrollRange(ScrollFrame.ScrollBar, value)
+    local active = guide.steps[RXPCData.currentStep]
+    if not suppressRetry and not force and followedGuide == guide and followedStep == active then return end
+    self:CancelScrollFollow()
+    if not suppressRetry then
+        followedGuide, followedStep, followedTarget = guide, active, n
     end
-    ScrollFrame.ScrollBar:SetValue(value)
-
-    value = math.floor(value+0.5)
-    if not suppressRetry and value ~= lastScrollValue then
-        addon.ScheduleTask(0,BottomFrame.StepScroll,n)
+    local request = scrollRequest
+    local function Apply()
+        local value = GetStepScrollValue(n)
+        if refreshScrollRange then refreshScrollRange(ScrollFrame.ScrollBar, value) end
+        ScrollFrame.ScrollBar:SetValue(value)
     end
-    lastScrollValue = value
+    Apply()
+    if not suppressRetry then
+        addon.scheduler:After(self, "step-scroll", 0, function()
+            if request ~= scrollRequest or addon.currentGuide ~= guide or
+                guide.steps[n] ~= step or guide.steps[RXPCData.currentStep] ~= active or
+                not IsFrameShown(nil, step) then return end
+            Apply() -- one correction after deferred layout; never schedules itself
+        end)
+    end
 end
 
 RXPFrame:SetWidth(addon.width)
@@ -624,6 +664,19 @@ local function ApplyStepVisualState(frame, step, bottom)
                            (bottom and addon.colors.bottomFrameBG or
                                addon.colors.background)
     local textColor = visual and visual.text or addon.activeTheme.textColor
+
+    if addon.presentation and addon.presentation:IsModern() then
+        addon.presentation:Skin(frame, true)
+        -- Keep progress/accessibility colours as an accent, not a solid slab.
+        if addon.settings.profile.activeTheme == "Default" and
+            (addon.settings.profile.colorBlindMode or "off") == "off" then
+            local _, surface = addon.presentation:Palette()
+            background = {surface[1] * 0.8 + background[1] * 0.2,
+                surface[2] * 0.8 + background[2] * 0.2,
+                surface[3] * 0.8 + background[3] * 0.2, surface[4]}
+        end
+        frame:SetBackdropBorderColor(textColor[1], textColor[2], textColor[3], 0.55)
+    end
 
     frame.stepVisualState = state
     frame.stepVisualBackground = background
@@ -1047,6 +1100,7 @@ function addon.SetStep(n, n2, loopback)
                                               .guideFontSize, "")
         end
         if stepframe.theme ~= addon.activeTheme then
+            stepframe.rxpModernBackdrop = nil
             stepframe.theme = addon.activeTheme
             stepframe:ClearBackdrop()
             stepframe:SetBackdrop(RXPFrame.backdrop.edge)
@@ -1410,6 +1464,7 @@ function CurrentStepFrame.UpdateText(languageRefresh)
     local totalHeight, frameHeight = 0, 0
     local c, e, h, spacing = 0, 0, 0, 0
     local anchor = 0
+    local modern = addon.presentation and addon.presentation:IsModern()
     -- local heightDiff = RXPFrame:GetHeight() - CurrentStepFrame:GetHeight()
     local loopStepIndex, stepframe, elementFrame, icon
 
@@ -1420,6 +1475,8 @@ function CurrentStepFrame.UpdateText(languageRefresh)
         stepframe = CurrentStepFrame.framePool[c]
 
         if stepframe then
+            local modernCard = modern and not step.tip
+            local cardGap = modernCard and 4 or 5
             ApplyStepVisualState(stepframe, step, false)
             if not step.tip then
                 stepframe:ClearAllPoints()
@@ -1429,19 +1486,50 @@ function CurrentStepFrame.UpdateText(languageRefresh)
                     stepframe:SetPoint("TOPRIGHT", CurrentStepFrame, 0, 0)
                 else
                     stepframe:SetPoint("TOPLEFT", CurrentStepFrame.framePool[anchor],
-                                    "BOTTOMLEFT", 0, -5)
+                                    "BOTTOMLEFT", 0, -cardGap)
                     stepframe:SetPoint("TOPRIGHT", CurrentStepFrame.framePool[anchor],
-                                    "BOTTOMRIGHT", 0, -5)
+                                    "BOTTOMRIGHT", 0, -cardGap)
                 end
 
                 stepframe:SetMovable(false)
                 anchor = c
             end
 
-            stepframe.number.text:SetText(step.title and
+            local title = step.title and
                 addon.locale.GuideText(step.title, step, "title") or
-                (fmt(L("Step %d"), loopStepIndex)))
-            stepframe.number:SetSize(stepframe.number.text:GetStringWidth() + 10, 17)
+                (fmt(L("Step %d"), loopStepIndex))
+            local titleHeight = 0
+            if modernCard then
+                stepframe.rxpModernTitle = true
+                stepframe.number:ClearBackdrop()
+                if step.sticky then title = fmt(L("Ongoing: %s"), title)
+                elseif loopStepIndex == RXPCData.currentStep then title = fmt(L("Current objective: %s"), title) end
+                stepframe.number:ClearAllPoints()
+                stepframe.number:SetPoint("TOPLEFT", stepframe, "TOPLEFT", 8, -6)
+                stepframe.number:SetWidth(math.max(40, stepframe:GetWidth() - 16))
+                addon.guideLayout:PrepareText(stepframe.number.text, stepframe.number,
+                    "TOPLEFT", 0, 0, stepframe.number:GetWidth())
+                stepframe.number.text:SetJustifyH("LEFT")
+                stepframe.number.text:SetText(title)
+                titleHeight = math.ceil(stepframe.number.text:GetStringHeight())
+                stepframe.number:SetHeight(titleHeight)
+                stepframe.number:SetAlpha(1)
+            else
+                if stepframe.rxpModernTitle then
+                    -- A pooled card can later host an independent tip window.
+                    stepframe.rxpModernTitle = nil
+                    stepframe.number:ClearAllPoints()
+                    stepframe.number:SetPoint("TOPLEFT", stepframe, 7, 5)
+                    stepframe.number:SetBackdrop(RXPFrame.backdrop.edge)
+                    stepframe.number.text:ClearAllPoints()
+                    stepframe.number.text:SetWidth(0)
+                    stepframe.number.text:SetHeight(0)
+                    stepframe.number.text:SetPoint("CENTER", stepframe.number, 2, 1)
+                    stepframe.number.text:SetJustifyH("CENTER")
+                end
+                stepframe.number.text:SetText(title)
+                stepframe.number:SetSize(stepframe.number.text:GetStringWidth() + 10, 17)
+            end
 
             e = 0
             frameHeight = 0
@@ -1462,12 +1550,12 @@ function CurrentStepFrame.UpdateText(languageRefresh)
                         elementFrame:SetAlpha(1)
 
                         elementFrame.button:ClearAllPoints()
-                        elementFrame.button:SetPoint("TOPLEFT", elementFrame, 6, -1)
+                        elementFrame.button:SetPoint("TOPLEFT", elementFrame, modernCard and 8 or 6, -1)
 
-                        elementFrame.text:ClearAllPoints()
-                        elementFrame.text:SetPoint("TOPLEFT", elementFrame.button,
-                                                "TOPRIGHT", 11, -1)
-                        elementFrame.text:SetPoint("RIGHT", stepframe, -5, 0)
+                        addon.guideLayout:PrepareText(elementFrame.text, elementFrame.button,
+                            "TOPRIGHT", 11, -1, stepframe:GetWidth() -
+                            (modernCard and 8 or 6) - elementFrame.button:GetWidth() -
+                            11 - (modernCard and 8 or 5))
 
                          -- Prevent text from overwritten with " ", could be stale text
                         if element.text ~= ' ' then
@@ -1481,6 +1569,10 @@ function CurrentStepFrame.UpdateText(languageRefresh)
 
                         h = math.ceil(elementFrame.text:GetStringHeight() *
                                                 1.1) + 1
+                        if modernCard then
+                            h = math.max(elementFrame.button:GetHeight(),
+                                math.ceil(elementFrame.text:GetStringHeight()) + 2)
+                        end
                         -- print('sh:',h)
                         elementFrame:SetHeight(h)
                         frameHeight = frameHeight + h
@@ -1519,9 +1611,10 @@ function CurrentStepFrame.UpdateText(languageRefresh)
                     elementFrame:ClearAllPoints()
 
                     if e == 1 then
-                        elementFrame:SetPoint("TOPLEFT", stepframe, 0, -10 + spacing)
+                        local inset = modernCard and (titleHeight + 10) or 10
+                        elementFrame:SetPoint("TOPLEFT", stepframe, 0, -inset + spacing)
                         elementFrame:SetPoint("TOPRIGHT", stepframe, 0,
-                                            -10 + spacing)
+                                            -inset + spacing)
                     else
                         elementFrame:SetPoint("TOPLEFT", stepframe.elements[e - 1],
                                             "BOTTOMLEFT", 0, 0 + spacing)
@@ -1552,7 +1645,7 @@ function CurrentStepFrame.UpdateText(languageRefresh)
                     stepframe:EnableMouse(true)
                 end
                 stepframe:SetAlpha(1)
-                frameHeight = math.ceil(frameHeight + 18)
+                frameHeight = math.ceil(frameHeight + (modernCard and titleHeight + 16 or 18))
             end
 
             stepframe:SetHeight(frameHeight)
@@ -1561,7 +1654,7 @@ function CurrentStepFrame.UpdateText(languageRefresh)
                 frameHeight = -5
             end
 
-            totalHeight = totalHeight + frameHeight + 5
+            totalHeight = totalHeight + frameHeight + cardGap
         end
     end
 
@@ -1575,7 +1668,8 @@ function CurrentStepFrame.UpdateText(languageRefresh)
         end
     end
 
-    CurrentStepFrame:SetHeight(totalHeight - 5)
+    CurrentStepFrame:SetHeight(modern and math.max(1, totalHeight - 4) or totalHeight - 5)
+    if addon.presentation then addon.presentation:ApplyCollapse() end
 end
 
 BottomFrame:SetPoint("TOPLEFT", RXPFrame, 3, -3)
@@ -1675,6 +1769,7 @@ function addon.UpdateBrowseModeButton()
             fontString:SetTextColor(1, 0.82, 0)
         end
     end
+    if addon.presentation then addon.presentation:QueueFooter() end
 end
 
 function addon.SetBrowseMode(enabled, silent)
@@ -1683,6 +1778,10 @@ function addon.SetBrowseMode(enabled, silent)
     addon.browseMode = enabled
     if not enabled then addon.updateSteps = true end
     addon.UpdateBrowseModeButton()
+    if changed and not enabled and addon.currentGuide then
+        local target = followedGuide == addon.currentGuide and followedTarget or RXPCData.currentStep
+        BottomFrame:StepScroll(target, false, true)
+    end
     if changed and not silent and addon.comms then
         addon.comms.PrettyPrint(enabled and
             L("Browse mode ON - progression frozen.") or
@@ -1760,6 +1859,7 @@ function addon.UpdatePreflightBadge(report)
             fontString:SetTextColor(0.35, 1, 0.35)
         end
     end
+    if addon.presentation then addon.presentation:QueueFooter() end
 end
 addon.UpdatePreflightBadge()
 
@@ -1767,6 +1867,10 @@ addon.UpdatePreflightBadge()
 -- anchors prevents independently loaded optional tools from overlapping one
 -- another or the XP status hit region.
 function addon.UpdateFooterStatusAnchor()
+    if addon.presentation and addon.presentation:IsModern() then
+        addon.presentation:QueueFooter()
+        return
+    end
     local anchor = Footer.preflight
     for _, button in ipairs({Footer.speedrun, Footer.speedrunAdvisors}) do
         if button then
@@ -1848,6 +1952,10 @@ ScrollFrame:SetPoint("BOTTOMRIGHT", BottomFrame, -20, 7)
 ScrollFrame.ScrollBar:SetPoint("TOPLEFT", ScrollFrame, "TOPRIGHT", 0, -18)
 
 function RXPFrame.UpdateScrollBar()
+    if addon.presentation and addon.presentation:IsModern() then
+        addon.presentation:SkinScrollBar()
+        return
+    end
     local prefix = addon.GetTexture("Scrollbar/")
 
     local s = ScrollFrame.ScrollBar.ScrollDownButton
@@ -1878,12 +1986,19 @@ refreshScrollRange = function(self, value)
 
     local childHeight = FiniteNumber(ScrollChild:GetHeight(), 0)
     local frameHeight = FiniteNumber(BottomFrame:GetHeight(), 0)
+    local modern = addon.presentation and addon.presentation:IsModern()
+    if modern then frameHeight = FiniteNumber(ScrollFrame:GetHeight(), frameHeight) end
     local scroll = math.floor(childHeight + 10) - frameHeight
     local currentStep = FiniteNumber(RXPCData.currentStep, 1)
     local index = currentStep > 1 and
                       FiniteNumber(stepPos[currentStep - 1], nil)
     local zero = addon.settings.profile.hideCompletedSteps and index and
                      index + currentStep or 0
+    if modern then
+        scroll = childHeight - frameHeight
+        zero = addon.settings.profile.hideCompletedSteps and (stepPos[currentStep] or 0) or 0
+        zero = math.min(zero, math.max(0, scroll))
+    end
 
     zero = math.max(0, FiniteNumber(zero, 0))
     scroll = math.max(zero, FiniteNumber(scroll, zero))
@@ -1920,7 +2035,15 @@ ScrollChild:SetWidth(RXPFrame:GetWidth() - 35)
 ScrollFrame:SetScrollChild(ScrollChild)
 ScrollFrame:EnableMouseWheel(true)
 
+-- Preserve native slider/arrow handlers. Only genuine input cancels following;
+-- programmatic SetValue calls and cosmetic reflows must not masquerade as input.
+local function CancelManualScroll() BottomFrame:CancelScrollFollow() end
+ScrollFrame.ScrollBar:HookScript("OnMouseDown", CancelManualScroll)
+ScrollFrame.ScrollBar.ScrollUpButton:HookScript("OnMouseDown", CancelManualScroll)
+ScrollFrame.ScrollBar.ScrollDownButton:HookScript("OnMouseDown", CancelManualScroll)
+
 function BottomFrame:ScrollBySteps(delta)
+    self:CancelScrollFollow()
     if not addon.currentGuide or not addon.currentGuide.steps or
         not ScrollFrame.ScrollBar or delta == 0 then return end
     local candidates = {}
@@ -1955,7 +2078,6 @@ function BottomFrame:ScrollBySteps(delta)
     -- still be reflowing after an active-step change. A mouse-wheel gesture is
     -- already operating on the final visible rows, so that retry causes a
     -- noticeable snap-back (and rapid ticks could retain an older destination).
-    addon.scheduledTasks[BottomFrame.StepScroll] = nil
     self:StepScroll(candidates[target].index, true)
 end
 
@@ -2474,8 +2596,9 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
             addon.RenderFrame(true,true)
     end
 
-    if addon.settings.profile.frameHeight then
-        RXPFrame:SetHeight(addon.settings.profile.frameHeight)
+    local savedHeight = addon.presentation and addon.presentation:GetHeight() or addon.settings.profile.frameHeight
+    if savedHeight then
+        RXPFrame:SetHeight(savedHeight)
     end
     if addon.noGuide then
         RXPFrame:SetHeight(addon.height)
@@ -2498,6 +2621,7 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
     table.wipe(addon.scheduledTasks)
     table.wipe(addon.stepUpdateList)
     addon.updateTipWindow = false
+    BottomFrame:CancelScrollFollow(true)
     addon.currentGuide = nil
     local renderFrame
 
@@ -2669,6 +2793,7 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
         frame.step = step
         frame:SetAlpha(0.66)
         frame:ClearAllPoints()
+        frame.rxpRowOffset, frame.rxpRowHeight, frame.rxpRowGutter = nil, nil, nil
         local anchor
         if n == 1 then
             anchor = ScrollChild
@@ -2684,6 +2809,7 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
             frame:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -3)
         end
         frame:ClearBackdrop()
+        frame.rxpModernBackdrop = nil -- pooled rows must be reskinned after the legacy reset
         frame:SetBackdrop(RXPFrame.backdrop.bottom)
         ApplyStepVisualState(frame, step, true)
 
@@ -2875,6 +3001,7 @@ function addon.RefreshGuideLanguage()
     if addon.guideHub and addon.guideHub.Refresh then
         addon.guideHub:Refresh()
     end
+    if addon.presentation then addon.presentation:SettingsChanged() end
     if addon.RefreshNavigationLanguage then
         addon.RefreshNavigationLanguage()
     elseif addon.UpdateMap and guide then
@@ -2882,8 +3009,33 @@ function addon.RefreshGuideLanguage()
     end
 end
 
+-- Cosmetic refresh only. Unlike RenderFrame/SetStep, this retains every
+-- directive host, reservation, queued advance and event registration.
+function addon.RefreshGuidePresentation()
+    addon.guideLayout:Invalidate()
+    addon.UpdateGuideFontSize(true)
+    RXPFrame:UpdateVisuals()
+    if addon.currentGuide then
+        CurrentStepFrame.UpdateText(true)
+        BottomFrame.UpdateFrame(nil, nil, true)
+    end
+    if addon.presentation and addon.presentation:IsModern() then
+        local data = addon.presentation:GetHUD()
+        local compact = data.collapsed or (addon.currentGuide and addon.currentGuide.hidewindow)
+        RXPFrame:SetHeight(compact and 28 or addon.presentation:GetExpandedHeight())
+        if not data.collapsed and not (addon.currentGuide and addon.currentGuide.hidewindow) then
+            BottomFrame:Show()
+        end
+        addon.presentation:ApplyHUD()
+    end
+    RXPFrame.SetStepFrameAnchor()
+end
+
 function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
     local level = UnitLevel("player")
+    local modern = addon.presentation and addon.presentation:IsModern()
+    local modernReflow = true
+    ScrollChild:SetWidth(math.max(40, RXPFrame:GetWidth() - 35))
 
     if stepPos[0] and ((not self and stepn) or (self and self.step)) and IsFrameShown(self,self and self.step) then
         local stepNumber = stepn or self.step.index
@@ -2945,9 +3097,9 @@ function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
                                          (meta and meta.machine) or false
                 rawtext = addon.ReplaceNpcIds(rendered, element)
                 if not text then
-                    text = "   " .. rawtext
+                    text = (modern and "" or "   ") .. rawtext
                 else
-                    text = text .. "\n   " .. rawtext
+                    text = text .. (modern and "\n" or "\n   ") .. rawtext
                 end
             end
         end
@@ -2959,8 +3111,13 @@ function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
             step.text = text
         end
 
-        local measuredHeight = addon.guideLayout:MeasureText(
-            frame.text, text, languageRefresh, hideStep)
+        local measuredHeight
+        if modern then measuredHeight, modernReflow = addon.presentation:MeasureRow(frame, text, hideStep)
+        else
+            addon.guideLayout:PrepareText(frame.text, frame, "TOPLEFT", 0, -5,
+                frame:GetWidth() - frame.number:GetWidth())
+            measuredHeight = addon.guideLayout:MeasureText(frame.text, text, false, hideStep)
+        end
         frame.guideTranslationFallback = translationFallback or nil
         frame.guideTranslationMachine = translationMachine or nil
 
@@ -2973,10 +3130,11 @@ function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
         end
         ApplyStepVisualState(frame, step, true)
 
-        addon.guideLayout:UpdateHeight(frame, fheight, stepPos, stepNumber)
+        if modern then frame:EnableMouse(not hideStep)
+        else addon.guideLayout:UpdateHeight(frame, fheight, stepPos, stepNumber) end
 
     else
-        addon.updateBottomFrame = false
+        if not languageRefresh then addon.updateBottomFrame = false end
 
         local totalHeight = 0
         --local hiddenFrames = 0
@@ -2991,7 +3149,7 @@ function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
             local hideStep = step.level > level or not IsFrameShown(frame,step)
             local fheight
             for _, element in ipairs(frame.step.elements or {}) do
-                if not self then
+                if not self and not languageRefresh then
                     local stepDiff = element.step.index - RXPCData.currentStep
 
                     element.element = element
@@ -3031,9 +3189,9 @@ function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
                                              (meta and meta.machine) or false
                     rawtext = addon.ReplaceNpcIds(rendered, element)
                     if not text then
-                        text = "   " .. rawtext
+                        text = (modern and "" or "   ") .. rawtext
                     else
-                        text = text .. "\n   " .. rawtext
+                        text = text .. (modern and "\n" or "\n   ") .. rawtext
                     end
                 end
             end
@@ -3054,20 +3212,31 @@ function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
             ApplyStepVisualState(frame, step, true)
 
             if frame.text then
-                if hideStep then
+                if not modern then
+                    addon.guideLayout:PrepareText(frame.text, frame, "TOPLEFT", 0, -5,
+                        frame:GetWidth() - frame.number:GetWidth())
+                end
+                if modern then
+                    fheight = addon.presentation:MeasureRow(frame, text, hideStep)
+                    frame:EnableMouse(not hideStep)
+                    if hideStep then frame:SetAlpha(0) end
+                elseif hideStep then
                     --hiddenFrames = hiddenFrames + 1
                     addon.guideLayout:MeasureText(frame.text, text, true, true)
                     fheight = 1.00
                     frame:SetAlpha(0)
                 else
-                    fheight = addon.guideLayout:MeasureText(frame.text, text, true)
+                    fheight = addon.guideLayout:MeasureText(frame.text, text, false)
                 end
             end
             step.text = text
             frame.guideTranslationFallback = translationFallback or nil
             frame.guideTranslationMachine = translationMachine or nil
 
-            if fheight == 1 and not IsFrameShown(frame,step) then
+            if modern then
+                -- MeasureRow owns Modern geometry; reflow below uses the same
+                -- offsets for both full and single-row refreshes.
+            elseif fheight == 1 and not IsFrameShown(frame,step) then
                 frame:SetHeight(1)
                 fheight = -3
             else
@@ -3087,7 +3256,9 @@ function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
 
     local guide = addon.currentGuide
 
-    if guide then
+    if modern then
+        if modernReflow then addon.presentation:ReflowRows(ScrollChild, stepPos) end
+    elseif guide then
         ScrollChild:SetHeight(ScrollChild.f1:GetHeight() -
                                   BottomFrame.hiddenFrames * 4)
     end
@@ -3096,7 +3267,16 @@ function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
     ScrollChild:SetWidth(w)
     local bottomFrameHeight = BottomFrame:GetHeight()
 
-    if bottomFrameHeight < 30 then
+    if addon.presentation and addon.presentation:IsModern() then
+        local data = addon.presentation:GetHUD()
+        if data.collapsed or (guide and guide.hidewindow) then
+            BottomFrame:Hide()
+            RXPFrame:SetHeight(28)
+        elseif not BottomFrame:IsShown() then
+            RXPFrame:SetHeight(addon.presentation:GetExpandedHeight())
+            BottomFrame:Show()
+        end
+    elseif bottomFrameHeight < 30 then
         BottomFrame:Hide()
         if RXPFrame:GetHeight() < 28 then RXPFrame:SetHeight(28) end
     elseif guide and guide.hidewindow then
@@ -3115,7 +3295,8 @@ function BottomFrame.UpdateFrame(self, stepn, languageRefresh)
         BottomFrame:Show()
     end
 
-    addon.BetaVersionCheck()
+    if refreshScrollRange then refreshScrollRange(ScrollFrame.ScrollBar) end
+    if not languageRefresh then addon.BetaVersionCheck() end
 
 end
 -- addon.hiddenFrames = 0
@@ -3178,6 +3359,10 @@ function RXPFrame:GenerateMenuTable(menu)
         })
     end
 
+    tinsert(menuList, {
+        text = L("Guide Library"), notCheckable = 1,
+        func = function() if addon.guideHub then addon.guideHub:Toggle() end end
+    })
     local groupList = {}
     local originalGroupList = {}
     local farmGuides = {}
@@ -3809,7 +3994,7 @@ function RXPFrame:GenerateMenuTable(menu)
     return menuList
 end
 
-function addon.UpdateGuideFontSize()
+function addon.UpdateGuideFontSize(presentationOnly)
     local size =
         (addon.settings.profile and addon.settings.profile.guideFontSize) or 9
 
@@ -3837,6 +4022,11 @@ function addon.UpdateGuideFontSize()
         if frame.text then frame.text:SetFont(addon.font, size, "") end
     end
 
+    if presentationOnly then return end
+    if addon.presentation and addon.presentation:IsModern() then
+        addon.presentation:Invalidate()
+        return
+    end
     if addon.currentGuide then
         CurrentStepFrame.UpdateText()
         BottomFrame.UpdateFrame()

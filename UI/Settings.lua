@@ -74,6 +74,17 @@ local function AddToBlizzardOptions(appName, name, parent, ...)
                                         ...)
     _G.Settings = clientSettings
     if not ok then error(panel, 2) end
+    if panel and panel.obj and not panel.obj.rxpHubObserver then
+        local widget = panel.obj
+        widget.rxpHubObserver = true
+        local finished = widget.LayoutFinished
+        widget.LayoutFinished = function(self, ...)
+            if finished then finished(self, ...) end
+            if addon.libraryTabs and not addon.libraryTabs.rendering then
+                addon.libraryTabs:SettingsChanged()
+            end
+        end
+    end
     return panel, categoryID
 end
 
@@ -220,13 +231,20 @@ local function NormalizeLegacyAceConfigOptions(option)
 end
 
 function addon.settings.OpenFeatureToolSettings(toolPage)
-    addon.settings.OpenSettings()
+    if addon.libraryTabs and addon.featureToolsUI then
+        return addon.featureToolsUI:Open(toolPage)
+    end
+    return addon.settings.OpenLegacyFeatureToolSettings(toolPage)
+end
+
+function addon.settings.OpenLegacyFeatureToolSettings(toolPage)
+    addon.settings.OpenLegacySettings()
     RunOnNextFrame(function()
         if not (AceConfigDialog and AceConfigDialog.SelectGroup) then return end
-        local selected = type(toolPage) == "string" and toolPage ~= "" and
-                             toolPage or "routePreflight"
+        local selected = type(toolPage) == "table" and toolPage or
+            {type(toolPage) == "string" and toolPage ~= "" and toolPage or "routePreflight"}
         pcall(AceConfigDialog.SelectGroup, AceConfigDialog, addon.title,
-              "featureToolsSettings", selected)
+              "featureToolsSettings", unpack(selected))
     end)
 end
 
@@ -247,6 +265,14 @@ function addon.settings.RegisterOptionsPanel(panelName, panel)
 end
 
 function addon.settings.OpenSettings(panelName)
+    if addon.libraryTabs and addon.guideHub then
+        return addon.libraryTabs:Open(panelName == "Import" and "Import" or "Settings",
+            panelName ~= "Import" and panelName or nil)
+    end
+    return addon.settings.OpenLegacySettings(panelName)
+end
+
+function addon.settings.OpenLegacySettings(panelName)
     -- Interface 30300 always uses the stock Interface Options frame. Partial
     -- Settings backports supplied by private-server UI packs must not route us
     -- into AceConfig's retail category API after legacy registration.
@@ -293,9 +319,8 @@ function addon.settings.OpenSettings(panelName)
 end
 
 function addon.settings.ChatCommand(input)
-    if not input then addon.settings.OpenSettings() end
-
-    input = input:trim()
+    input = (input or ""):trim()
+    if input == "" and addon.libraryTabs then return addon.libraryTabs:Open() end
     if input == "import" then
         addon.settings.OpenSettings('Import')
     elseif input == "debug" then
@@ -406,6 +431,7 @@ end
 
 local settingsDBDefaults = {
     profile = {
+        uiStyle = "modern",
         hardcore = false,
         enableTracker = true,
         enableLevelUpAnnounceSolo = true,
@@ -607,6 +633,7 @@ function addon.settings:InitializeDatabase()
     settingsDB.RegisterCallback(self, "OnProfileCopied", "CopyProfile")
     settingsDB.RegisterCallback(self, "OnProfileReset", "ResetProfile")
     self.profile = settingsDB.profile
+    if addon.presentation then addon.presentation:Initialize() end
     self.profile.soundOnFind = self:NormalizeTargetingSound(
                                    self.profile.soundOnFind)
     self.profile.guideScrollSteps = math.max(1, math.min(10,
@@ -987,7 +1014,9 @@ function importCache.validate(self)
     importCache.bufferString = ""
     importCache.bufferData = {}
     -- Gets disabled on paste, re-enable after processing completes
-    importCache.widget.obj.editBox:Enable()
+    local editor = importCache.editor or (importCache.widget and importCache.widget.obj.editBox)
+    if editor then editor:Enable() end
+    importCache.editor = nil
     if errorMsg then
         addon.settings:UpdateImportStatusHistory(errorMsg)
         return errorMsg
@@ -1279,43 +1308,89 @@ function addon.settings:CreateImportOptionsPanel()
     end
 
     local function PasteHook(this, char)
+        if importCache.editor and importCache.editor ~= this and #importCache.bufferData > 0 then
+            ProcessBuffer(importCache.editor)
+        end
+        importCache.editor = this
         local time = GetTime()
         if this:IsEnabled() then
             -- Disable input while processing paste
             this:Disable()
         end
-        if importCache.lastBuffer ~= time then
+        if importCache.lastBuffer ~= time or not this:GetScript("OnUpdate") then
             importCache.lastBuffer = time
-            this:SetScript('OnUpdate', ProcessBuffer)
+            this:SetScript('OnUpdate', function(box)
+                if importCache.editor == box and box.obj and box.obj:GetUserData("option") == importOptionsTable.args.importBox then
+                    ProcessBuffer(box)
+                else
+                    box:SetScript("OnUpdate", nil)
+                end
+            end)
         end
 
         tinsert(importCache.bufferData, char)
     end
 
-    local function textboxHook()
-        -- Prevent hooking multiple times on show
-        if importCache.widget then return end
-
-        local n = 1
-        local inputWidget = true
-
-        while inputWidget do
-            inputWidget = _G["MultiLineEditBox" .. n .. "ScrollFrame"]
-
-            if inputWidget and inputWidget.obj.label:GetText() ==
-                L('Guides to import') then
-                importCache.widget = inputWidget
-                inputWidget.obj.button:SetText(L("Import")) -- TODO locale
-                local editBox = inputWidget.obj.editBox
-
-                editBox:HookScript("OnEditFocusGained", EditBoxHook)
-                editBox:HookScript("OnChar", PasteHook)
-                -- Prevent Accept button from being disabled by programatic text update
-                editBox:SetScript("OnTextSet", nil)
-                break
+    local function IsImportBox(editBox)
+        return editBox.obj and editBox.obj:GetUserData("option") == importOptionsTable.args.importBox
+    end
+    local function textboxHook(container)
+        -- Scope hooks to this registered option, not a translated label or a
+        -- globally numbered pooled widget. The fallback and hub can coexist.
+        container = container and container.children and container or self.gui.import.obj
+        if not container.rxpImportRelease then
+            container.rxpImportRelease = true
+            local release = container.ReleaseChildren
+            container.ReleaseChildren = function(owner)
+                local function ReleaseEditor(widget)
+                    local box = widget.editBox
+                    if box and IsImportBox(box) then
+                        if importCache.editor == box then
+                            if #importCache.bufferData > 0 then ProcessBuffer(box) end
+                            importCache.editor = nil
+                        end
+                        box:SetScript("OnUpdate", nil)
+                        box:SetMaxBytes(0)
+                        box.isMaxBytesSet = nil
+                        box:Enable()
+                        box:ClearFocus()
+                        if importCache.widget == widget.scrollFrame then importCache.widget = nil end
+                    end
+                    for _, child in ipairs(widget.children or {}) do ReleaseEditor(child) end
+                end
+                ReleaseEditor(owner)
+                return release(owner)
             end
-            n = n + 1
         end
+        local function Visit(widget)
+            if widget.editBox and IsImportBox(widget.editBox) then
+                importCache.widget = widget.scrollFrame
+                widget.button:SetText(L("Import"))
+                local editBox = widget.editBox
+                if not editBox.rxpImportHooked then
+                    editBox.rxpImportHooked = true
+                    editBox:HookScript("OnEditFocusGained", function(box)
+                        if IsImportBox(box) then
+                            importCache.widget = box.obj.scrollFrame
+                            EditBoxHook(box)
+                        end
+                    end)
+                    editBox:HookScript("OnChar", function(box, char)
+                        if IsImportBox(box) then
+                            importCache.widget = box.obj.scrollFrame
+                            PasteHook(box, char)
+                        end
+                    end)
+                    editBox:HookScript("OnTextSet", function(box)
+                        if IsImportBox(box) and #importCache.bufferString > 0 and not notOnline() then
+                            box.obj.button:Enable()
+                        end
+                    end)
+                end
+            end
+            for _, child in ipairs(widget.children or {}) do Visit(child) end
+        end
+        Visit(container)
     end
 
     self.textboxHook = textboxHook
@@ -1331,7 +1406,17 @@ function addon.settings:CreateAceOptionsPanel()
         return L("This requires a reload to take effect, continue?")
     end
 
+    local function colorApplyDescription()
+        return addon.presentation:IsModern() and L("Use Apply to refresh colours without reloading.") or
+            L("Requires Reload to take effect")
+    end
+
     local function showStepList(value)
+        if addon.presentation and addon.presentation:IsModern() then
+            addon.presentation:GetHUD().collapsed = not value
+            addon.presentation:Invalidate()
+            return
+        end
         if addon.currentGuide and addon.currentGuide.hidewindow then
             return
         end
@@ -4147,6 +4232,19 @@ function addon.settings:CreateAceOptionsPanel()
                 name = L("Look and Feel"), -- TODO
                 order = 10,
                 args = {
+                    uiStyle = {
+                        name = L("Interface Style"), type = "select", order = 0.1,
+                        values = {modern = L("Modern"), legacy = L("Legacy")},
+                        get = function() return addon.presentation:GetRequestedStyle() end,
+                        set = function(_, value) addon.presentation:RequestStyle(value) end,
+                        desc = L("Changing the complete interface requires a voluntary reload. Guide progress is preserved.")
+                    },
+                    reloadStyle = {
+                        name = L("Reload Now"), type = "execute", order = 0.2,
+                        hidden = function() return not addon.presentation:IsPending() end,
+                        disabled = function() return not addon.presentation:CanReload() end,
+                        func = function() addon.presentation:Reload() end
+                    },
                     activeTheme = {
                         name = L("Choose Theme"), -- TODO locale
                         desc = L("Choose active theme"),
@@ -4164,7 +4262,7 @@ function addon.settings:CreateAceOptionsPanel()
                             end
                             SetProfileOption(info, value)
                             if self.profile.enableThemeLiveReload then
-                                addon.RenderFrame('themeReload')
+                                addon.presentation:RefreshAppearance()
                             end
                             AceConfigRegistry:NotifyChange(addon.title)
                         end,
@@ -4192,7 +4290,7 @@ function addon.settings:CreateAceOptionsPanel()
                             }
                             addon:RegisterTheme(self.profile.customTheme)
                             if self.profile.enableThemeLiveReload then
-                                addon.RenderFrame('themeReload')
+                                addon.presentation:RefreshAppearance()
                             end
                         end,
                         hidden = function()
@@ -4216,7 +4314,7 @@ function addon.settings:CreateAceOptionsPanel()
                             }
                             addon:RegisterTheme(self.profile.customTheme)
                             if self.profile.enableThemeLiveReload then
-                                addon.RenderFrame('themeReload')
+                                addon.presentation:RefreshAppearance()
                             end
                         end,
                         hidden = function()
@@ -4241,7 +4339,7 @@ function addon.settings:CreateAceOptionsPanel()
                             }
                             addon:RegisterTheme(self.profile.customTheme)
                             if self.profile.enableThemeLiveReload then
-                                addon.RenderFrame('themeReload')
+                                addon.presentation:RefreshAppearance()
                             end
                         end,
                         hidden = function()
@@ -4262,7 +4360,7 @@ function addon.settings:CreateAceOptionsPanel()
                             self.profile.customTheme.mapPins = {r, g, b, a or 1}
                             addon:RegisterTheme(self.profile.customTheme)
                             if self.profile.enableThemeLiveReload then
-                                addon.RenderFrame('themeReload')
+                                addon.presentation:RefreshAppearance()
                             end
                         end,
                         hidden = function()
@@ -4287,7 +4385,7 @@ function addon.settings:CreateAceOptionsPanel()
                                 fmt('|cFF%s', value)
                             addon:RegisterTheme(self.profile.customTheme)
                             if self.profile.enableThemeLiveReload then
-                                addon.RenderFrame('themeReload')
+                                addon.presentation:RefreshAppearance()
                             end
                             AceConfigRegistry:NotifyChange(addon.title)
                         end,
@@ -4332,7 +4430,7 @@ function addon.settings:CreateAceOptionsPanel()
                             addon:RegisterTheme(self.profile.customTheme)
 
                             if self.profile.enableThemeLiveReload then
-                                addon.RenderFrame('themeReload')
+                                addon.presentation:RefreshAppearance()
                             end
                         end,
                         hidden = function()
@@ -4341,7 +4439,7 @@ function addon.settings:CreateAceOptionsPanel()
                     },
                     customThemeTextColor = {
                         name = L("Text Color"), -- TODO locale
-                        desc = L("Requires Reload to take effect"),
+                        desc = colorApplyDescription,
                         type = "color",
                         width = optionsWidth,
                         order = 1.8,
@@ -4354,7 +4452,7 @@ function addon.settings:CreateAceOptionsPanel()
                             }
                             addon:RegisterTheme(self.profile.customTheme)
                             if self.profile.enableThemeLiveReload then
-                                addon.RenderFrame('themeReload')
+                                addon.presentation:RefreshAppearance()
                             end
                         end,
                         hidden = function()
@@ -4366,8 +4464,10 @@ function addon.settings:CreateAceOptionsPanel()
                         type = 'execute',
                         width = optionsWidth,
                         order = 1.9,
-                        confirm = requiresReload,
-                        func = function() _G.ReloadUI() end
+                        confirm = function() if not addon.presentation:IsModern() then return requiresReload() end end,
+                        func = function()
+                            if addon.presentation:IsModern() then addon.presentation:RefreshAppearance() else _G.ReloadUI() end
+                        end
                     },
                     customThemeReset = {
                         name = _G.RESET,
@@ -4379,7 +4479,7 @@ function addon.settings:CreateAceOptionsPanel()
                                 CopyTable(addon.customThemeBase)
                             addon:RegisterTheme(self.profile.customTheme)
                             if self.profile.enableThemeLiveReload then
-                                addon.RenderFrame('themeReload')
+                                addon.presentation:RefreshAppearance()
                             end
                             AceConfigRegistry:NotifyChange(addon.title)
                         end,
@@ -4415,7 +4515,7 @@ function addon.settings:CreateAceOptionsPanel()
                     },
                     textEnemyColor = {
                         name = _G.COMBATLOG_HIGHLIGHT_KILL,
-                        desc = L("Requires Reload to take effect"),
+                        desc = colorApplyDescription,
                         type = "color",
                         width = optionsWidth,
                         order = 2.1,
@@ -4429,7 +4529,7 @@ function addon.settings:CreateAceOptionsPanel()
                     },
                     textFriendlyColor = {
                         name = _G.FRIENDLY,
-                        desc = L("Requires Reload to take effect"),
+                        desc = colorApplyDescription,
                         type = "color",
                         width = optionsWidth,
                         order = 2.2,
@@ -4445,7 +4545,7 @@ function addon.settings:CreateAceOptionsPanel()
                     },
                     textLootColor = {
                         name = _G.LOOT,
-                        desc = L("Requires Reload to take effect"),
+                        desc = colorApplyDescription,
                         type = "color",
                         width = optionsWidth,
                         order = 2.3,
@@ -4459,7 +4559,7 @@ function addon.settings:CreateAceOptionsPanel()
                     },
                     textWarnColor = {
                         name = L("Warning"),
-                        desc = L("Requires Reload to take effect"),
+                        desc = colorApplyDescription,
                         type = "color",
                         width = optionsWidth,
                         order = 2.4,
@@ -4473,7 +4573,7 @@ function addon.settings:CreateAceOptionsPanel()
                     },
                     textPickColor = {
                         name = L("Pick Up"),
-                        desc = L("Requires Reload to take effect"),
+                        desc = colorApplyDescription,
                         type = "color",
                         width = optionsWidth,
                         order = 2.5,
@@ -4487,7 +4587,7 @@ function addon.settings:CreateAceOptionsPanel()
                     },
                     textBuyColor = {
                         name = L("Buy"),
-                        desc = L("Requires Reload to take effect"),
+                        desc = colorApplyDescription,
                         type = "color",
                         width = optionsWidth,
                         order = 2.6,
@@ -4504,8 +4604,10 @@ function addon.settings:CreateAceOptionsPanel()
                         type = 'execute',
                         width = optionsWidth,
                         order = 2.9,
-                        confirm = requiresReload,
-                        func = function() _G.ReloadUI() end -- TODO easier redraw?
+                        confirm = function() if not addon.presentation:IsModern() then return requiresReload() end end,
+                        func = function()
+                            if addon.presentation:IsModern() then addon.presentation:RefreshTextColors() else _G.ReloadUI() end
+                        end
                     },
                     customTextColorReset = {
                         name = _G.RESET,
@@ -4542,9 +4644,9 @@ function addon.settings:CreateAceOptionsPanel()
                         max = 2,
                         step = 0.05,
                         isPercent = true,
+                        get = function() return addon.presentation:GetScale() end,
                         set = function(info, value)
-                            SetProfileOption(info, value)
-                            addon.RXPFrame:SetScale(value)
+                            addon.presentation:SetScale(value)
                         end
                     },
                     guideFontSize = {
@@ -4633,6 +4735,7 @@ function addon.settings:CreateAceOptionsPanel()
                         width = optionsWidth,
                         order = 3.5,
                         get = function()
+                            if addon.presentation:IsModern() then return not addon.presentation:GetHUD().collapsed end
                             return addon.RXPFrame.BottomFrame:GetHeight() >= 35
                         end,
                         set = function(_, value)
@@ -5095,8 +5198,9 @@ function addon.settings:CreateAceOptionsPanel()
                                 if type(p.performancePresetBackup) ~= "table" then
                                     p.performancePresetBackup =
                                         CaptureProfileOptions(p, keys)
-                                    p.performancePresetBackup.frameHeight =
-                                        addon.RXPFrame:GetHeight()
+                                    if not addon.presentation:IsModern() then
+                                        p.performancePresetBackup.frameHeight = addon.RXPFrame:GetHeight()
+                                    end
                                 end
                                 p.enableTargetAutomation = false
                                 p.enableTips = false
@@ -5240,6 +5344,15 @@ function addon.settings:CreateAceOptionsPanel()
     -- AceDBOptions is attached after the root table is registered. Normalize
     -- that late subtree as well before AceConfigDialog validates it on open.
     NormalizeLegacyAceConfigOptions(optionsTable.args.profiles)
+    self.optionTree = optionsTable
+    if addon.presentation and not self.modernConfigListener then
+        self.modernConfigListener = {}
+        AceConfigRegistry.RegisterCallback(self.modernConfigListener, "ConfigTableChange", function(_, name)
+            if name == addon.title or (addon.RXPOptions and name == addon.RXPOptions.name .. "/Import") then
+                addon.presentation:SettingsChanged()
+            end
+        end)
+    end
 
     addon.RXPOptions = self.AddToBlizzardOptions(addon.title)
 
@@ -5545,6 +5658,7 @@ function addon.settings:RefreshProfile()
     if addon.attackTimer then addon.attackTimer:ApplySettings() end
     self:ApplyOptionalToolSettings()
     if addon.speedrun then addon.speedrun:ApplySuiteSettings() end
+    if addon.presentation then addon.presentation:SettingsChanged() end
 end
 
 function addon.settings:CopyProfile()
@@ -5570,6 +5684,7 @@ function addon.settings:CopyProfile()
     if addon.attackTimer then addon.attackTimer:ApplySettings() end
     self:ApplyOptionalToolSettings()
     if addon.speedrun then addon.speedrun:ApplySuiteSettings() end
+    if addon.presentation then addon.presentation:SettingsChanged() end
 end
 
 function addon.settings:ResetProfile()
@@ -5589,6 +5704,7 @@ function addon.settings:ResetProfile()
     settingsDBDefaults.profile.minimap.minimapPos = 146
     settingsDB.defaults.profile = settingsDBDefaults.profile
     settingsDB:ResetProfile(false, true)
+    if addon.presentation then addon.presentation:SettingsChanged() end
 end
 
 function addon.settings:CheckAddonCompatibility()
@@ -5666,8 +5782,7 @@ function addon.settings:ResetTextColors()
     self.profile.textWarnColor = addon.guideTextColors.default['RXP_WARN_']
     self.profile.textPickColor = addon.guideTextColors.default['RXP_PICK_']
     self.profile.textBuyColor = addon.guideTextColors.default['RXP_BUY_']
-    self:LoadTextColors()
-    addon.RenderFrame()
+    addon.presentation:RefreshTextColors()
     addon.UpdateMap()
     AceConfigRegistry:NotifyChange(addon.title)
 end
@@ -5681,8 +5796,7 @@ function addon.settings:DisableTextColors()
     self.profile.textWarnColor = default
     self.profile.textPickColor = default
     self.profile.textBuyColor = default
-    self:LoadTextColors()
-    addon.RenderFrame()
+    addon.presentation:RefreshTextColors()
     addon.UpdateMap()
     AceConfigRegistry:NotifyChange(addon.title)
 end
@@ -6039,6 +6153,9 @@ function addon.settings:SaveFramePositions()
           offsetYOrNil
 
     for frameName, frame in pairs(addon.enabledFrames) do
+        if frameName == "RXPFrame" and addon.presentation and addon.presentation:IsModern() then
+            addon.presentation:SaveHUD(frame)
+        else
         addon.settings.profile.frameSizes[frameName] = {
             frame:GetWidth(), frame:GetHeight()
         }
@@ -6058,6 +6175,7 @@ function addon.settings:SaveFramePositions()
                 offsetYOrNil
             }
         end
+        end
     end
 
 end
@@ -6068,6 +6186,9 @@ function addon.settings:LoadFramePositions()
     local p = addon.settings.profile
 
     for frameName, frame in pairs(addon.enabledFrames) do
+        if frameName == "RXPFrame" and addon.presentation and addon.presentation:IsModern() then
+            addon.presentation:RestoreHUD(frame)
+        else
         -- Wipe alpha frame data
         -- Alpha frame restoration only tracked one point, to [1] would be "TOPLEFT" or similar
         if p.framePositions[frameName] and p.framePositions[frameName][1] and
@@ -6090,13 +6211,14 @@ function addon.settings:LoadFramePositions()
         if p.frameSizes[frameName] then
             frame:SetSize(unpack(p.frameSizes[frameName]))
         end
+        end
     end
 
     addon.settings:LoadScales()
 end
 
 function addon.settings:LoadScales()
-    addon.RXPFrame:SetScale(self.profile.windowScale)
+    addon.RXPFrame:SetScale(addon.presentation and addon.presentation:GetScale() or self.profile.windowScale)
 
     if addon.arrowFrame then
         addon.arrowFrame:SetSize(32 * self.profile.arrowScale,

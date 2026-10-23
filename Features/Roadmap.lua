@@ -738,6 +738,7 @@ function roadmap:ApplyBackup(payload, replace)
     end
     addon:RestoreCharacterGuideProgress()
     if addon.guideHub then addon.guideHub:Refresh() end
+    if addon.presentation then addon.presentation:SettingsChanged() end
     return true
 end
 
@@ -765,6 +766,7 @@ function roadmap:RollbackBackup()
     self.backupRollback = nil
     addon:RestoreCharacterGuideProgress()
     if addon.guideHub then addon.guideHub:Refresh() end
+    if addon.presentation then addon.presentation:SettingsChanged() end
     return true
 end
 

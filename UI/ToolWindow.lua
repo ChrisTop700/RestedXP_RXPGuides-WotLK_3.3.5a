@@ -15,6 +15,8 @@ local tremove = table.remove
 manager.frames = manager.frames or {}
 manager.layerOrder = manager.layerOrder or {}
 manager.knownNames = manager.knownNames or {
+    "RXPGuideHub",
+    "RXPFeatureTools",
     "RXPRoutePreflightWindow",
     "RXPPerformanceInspector",
     "RXPHunterPetAssistant",
@@ -49,6 +51,7 @@ local function SetTreeFrameLevel(frame, base, depth, root)
     if not (frame and frame.SetFrameLevel) then return end
     root = root or frame
     frame:SetFrameLevel(base + min(depth, 8))
+    if frame.rxpPooledContent then return end
     if frame ~= root and frame.HookScript and not frame.rxpToolLayerHook then
         frame.rxpToolLayerHook = true
         frame:HookScript("OnEnter", function() manager:BringToFront(root) end)
@@ -248,7 +251,7 @@ function manager:ApplyVisuals(frame)
     if not frame then return end
     local colors = addon.colors or addon.activeTheme or {}
     local background = colors.background or {0.035, 0.035, 0.07, 0.98}
-    frame:SetBackdrop(backdrop)
+    if not (addon.presentation and addon.presentation:IsModern()) then frame:SetBackdrop(backdrop) end
     local frameName = frame.GetName and frame:GetName()
     local opacity = frameName and self:GetAppearanceValue(frameName, "opacity") or 1
     local backgroundOpacity = frameName and
@@ -260,6 +263,11 @@ function manager:ApplyVisuals(frame)
                            background[3] or 0.07,
                            themeAlpha * backgroundOpacity)
     frame:SetBackdropBorderColor(0.72, 0.72, 0.72, 1)
+    if addon.presentation and addon.presentation:IsModern() then
+        addon.presentation:Skin(frame)
+        local shell = addon.presentation:Palette()
+        frame:SetBackdropColor(shell[1], shell[2], shell[3], (shell[4] or 1) * backgroundOpacity)
+    end
     frame:SetAlpha(opacity or 1)
     frame:SetScale(scale or 1)
 
@@ -269,6 +277,10 @@ function manager:ApplyVisuals(frame)
                                   GetProfile().guideFontSize) or 9)
     if frame.title and addon.SetFontSafely then
         addon.SetFontSafely(frame.title, addon.font, fontSize + 4, "")
+        if addon.presentation and addon.presentation:IsModern() then
+            local _, _, accent = addon.presentation:Palette()
+            frame.title:SetTextColor(unpack(accent))
+        end
     end
     if frame.bodyText and addon.SetFontSafely then
         addon.SetFontSafely(frame.bodyText, addon.font, fontSize, "")

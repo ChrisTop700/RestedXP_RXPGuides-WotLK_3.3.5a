@@ -2493,7 +2493,7 @@ function addon:OnInitialize()
     addon.UpdateGuideFontSize()
     addon.isHidden = not addon.settings.profile.showEnabled or addon.settings.profile.hideGuideWindow
     addon.RXPFrame:SetShown(not addon.isHidden)
-    addon.RXPFrame:SetScale(addon.settings.profile.windowScale)
+    addon.RXPFrame:SetScale(addon.presentation and addon.presentation:GetScale() or addon.settings.profile.windowScale)
     addon.arrowFrame:SetSize(32 * addon.settings.profile.arrowScale,
                              32 * addon.settings.profile.arrowScale)
     addon.arrowFrame.text:SetFont(addon.font,

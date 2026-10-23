@@ -1,0 +1,164 @@
+Modern UI gameplay acceptance (WoW 3.3.5a)
+
+The earlier HUD/library/tool checks were user-confirmed before consolidation.
+Section 11 covers NEW interactions and remains pending in-client acceptance.
+
+Automated checks do not establish visual correctness or in-game frame cost.
+Use a disposable Orc Warrior first. Keep your real SavedVariables; do not
+delete them. Start with RXPGuides, BugGrabber and BugSack only. Server-driven
+quest acceptance must be suppressed for the manual-accept checks (record the
+effective Quests.IgnoreAutoAccept setting; this addon does not change it).
+
+1. Entry points and library
+   Reload once to load the updated files. Modern is the default when Interface
+   Style was not previously selected. Run /rxp guides (or /rxp hub).
+   Switch Validated & Fixed Guides / Original Upstream Guides. Search Durotar,
+   try the class/faction/availability filters, Favorites and Recent, then Clear
+   filters. Resize to the minimum width and scroll through the list.
+   EXPECT: readable rows contained in their list, no footer overlap, details
+   available before loading, no guide change merely from selecting a row.
+   Continue loads explicitly; Restart still asks for confirmation. Cancel it.
+   Selecting a Hardcore family still requires the existing mode confirmation;
+   cancel it and verify the current guide and step have not changed.
+
+2. Existing progress and Legacy fallback
+   On an existing test character, note the guide family, current step, manual
+   skips, sticky objectives and favorites. Move/resize the Modern guide.
+   Run /rxp, select Settings, then Look and Feel > Interface Style. Choose Legacy, then Later.
+   EXPECT: all screens remain Modern and no reload happens automatically.
+   Use Reload Now outside combat/quest dialogs. Legacy should restore its old
+   placement. Switch back to Modern and reload; Modern placement returns.
+   EXPECT: the same guide/checkpoint and no progress transfer between families.
+   /rxp reopens the last hub tab for this session; /rxp browse still controls
+   Browse Mode, not the library. Interface > AddOns retains the original panels.
+
+3. Durotar starter acceptance
+   Use Validated 1-6 Durotar. With quest automation disabled, right-click
+   Kaltunk: Your Place In The World (4641) must remain manual. Repeat with
+   automation enabled while holding Ctrl. Release Ctrl and reopen to accept.
+   At Gornek, verify 4641 turns in before Cutting Teeth (788) is accepted.
+   EXPECT: one guide update per action, no stale enabled Accept button.
+
+4. Cosmetic refresh and collapse
+   While Cutting Teeth is incomplete, change Guide Font Size, Window Scale
+   and theme in Look and Feel; resize the guide with its existing resize grip.
+   Collapse with the new '-' header control, kill a boar, then expand with '+'.
+   EXPECT: the counter is current, invisible instructions cannot be clicked,
+   and collapse did not disable progression. A normal full hide still pauses
+   guide automation as before. Test explicit/custom themes and accessibility
+   colors. In combat, use the existing target/item keybinds without moving or
+   reparenting those separate windows. Expect no protected-action warnings.
+
+5. Same-NPC ordering and manual rewards
+   Follow Sarkoth 790 -> 804 normally. Return to Gornek with 788 and 804 ready.
+   Check authored ordering: turn in 788, accept 789, accept Simple Parchment
+   2383, then turn in 804. Also test manual reward selection with automatic
+   reward choice disabled. A server-closed dialog may require another click.
+   EXPECT: delivered quests disappear, guide checkmarks update without reload,
+   no hanging accept/reward UI. Collapse/expand Valley of Trials in the quest
+   log afterwards; the header must remain usable. Reload with unfinished work.
+
+6. Feature Tools
+   Open Feature Tool Settings from the guide/minimap menu or library footer.
+   Read a tool's description; enable Attack Timer, then use Open Tool.
+   Change its font, scale, window opacity and background opacity; disable it.
+   EXPECT: controls apply live, Open Tool keeps its original toggle behavior,
+   disabling hides it, and unrelated tools remain disabled. Reopen settings:
+   merely displaying a slider must not change its saved value. Check related
+   enable controls on XP Estimator, Route Preflight and Hunter Pet Assistant
+   (Hunter character). Test the Speedrunning overview/master switch separately.
+   Overlap two tools: complete windows must stack, not interleave. Escape may
+   close the guide library, but must not close persistent feature-tool windows.
+   Advanced Settings must remain reachable, including imports and profiles.
+
+7. Display, profiles and backup
+   Repeat library/tool navigation at a small resolution, large fonts and high
+   UI scale. Try the supported locale you actually use. Missing optional
+   translations may show English; canonical guide selection must not change.
+   On a disposable profile, test profile copy/reset and backup merge/replace.
+   EXPECT: pending interface changes wait for reload, current controls refer
+   to the new profile, and saved guide progress remains intact. Reset This
+   Tool Window must affect only its own existing appearance/placement data.
+
+8. Compatibility and performance
+   Repeat the main quest sequence with Questie tracking enabled and Questie
+   automation disabled, preferably on another fresh character.
+   With adaptive performance disabled, take matched 30-second captures for
+   idle visible/hidden guide, step changes, resizing, library search and tool
+   settings. Compare Legacy and Modern, with the same guide and addon set.
+   Record peak frame time, map rebuilds, parsing/directive counts, UI behavior
+   and all Lua errors. Do not infer an FPS improvement from offline tests.
+
+9. Modern finishing-pass checks
+   Try narrow and wide HUD widths, large fonts and long translated labels.
+   EXPECT: complete footer button labels wrap into rows, XP/status text and
+   its tooltip stay inside the footer, and guide rows do not overlap it.
+   Test the Coach badge alone, advisor badge alone, both and neither; enable
+   an advisor while collapsed, then expand. Disabled tools must stay disabled.
+   EXPECT: collapse shows only the compact header, with no invisible footer
+   clicks, while objective counters continue updating. Test both top/bottom
+   objective anchors and locked resizing. Current objective / Ongoing labels
+   must not change authored titles, objective order or separate tip windows.
+   Scroll using the wheel, arrows and thumb. Compare full refreshes with a
+   single objective counter update: card spacing and scroll limits must match.
+   Check Browse, preflight status colors, scrollbar hover/pressed/disabled
+   states, branding, cog and resize grip under default and explicit themes.
+   In Feature Tool Settings, check 80%/100% opacity, integer font sizes and
+   fractional scales during initialization and dragging. Release once to
+   commit; reopening must preserve the raw value. Repeat Legacy restoration.
+
+10. Shared wrapping and scroll-follow repair (repeat in Modern and Legacy)
+   In Validated 1-6 Durotar, inspect the early Mottled Boars vendor-money
+   instruction. Narrow, widen, then narrow the HUD and increase the font size.
+   EXPECT: the complete sentence ending "including your armor" wraps without
+   an ellipsis; rows and active objectives expand without overlapping numbers,
+   checkboxes or following instructions. Long translated text should also wrap.
+   Scroll to earlier steps with the wheel, arrows and thumb while progression
+   remains enabled. Change a cosmetic setting and wait several update cycles.
+   EXPECT: no snap-back on the same step. Complete the current quest objective:
+   the next real step follows normally. Enter Browse Mode, inspect another
+   part of the list, then click Resume: the active destination returns.
+   Switch guides during pending updates; no delayed scroll from the old guide
+   should affect the new one. Modern should have a cog, diagonal resize grip
+   and tighter measured objective titles; Legacy keeps its original artwork.
+
+11. Unified hub (new; pending)
+   a. Reload, run /rxp guides, select a guide WITHOUT loading it, and scroll.
+      Switch through Feature Tools, Settings, Import and back to Guides.
+      EXPECT: same preview, filters, favorite and list position; no quest,
+      guide, step or feature changes. The four tabs exist in both styles.
+   b. In Feature Tools, select Supplies Checklist (or another disabled tool).
+      Read its instructions. Enable it, open its actual tool window, then close
+      the hub with Escape. EXPECT: the tool remains enabled/open. Reopen /rxp:
+      the last selected hub tab returns. Disable the tool explicitly afterward.
+      Its Advanced Settings button opens the matching full Settings category.
+   c. In Settings, check General automation, routing/dungeons, appearance,
+      keybindings, color pickers and Profiles. Change a harmless appearance
+      value; it applies once without changing the guide. Cancel a confirmation.
+      EXPECT: no action on cancellation, correct disabled/class-only controls.
+      Open Interface > AddOns > RestedXP as well; its controls remain usable.
+      Changes made there should appear when the corresponding hub page refreshes.
+   d. In Import, paste an invalid test string and press Import once. EXPECT: an
+      error/status message without a crash or an imported guide. Switch tabs
+      before submission and verify the buffer is retained. Use an existing
+      known-good import only on a disposable profile; do not purge real data.
+      Repeat with the original Interface > AddOns import panel, then use a
+      different multiline editor. EXPECT: no stale paste hook on other editors.
+   e. With a Custom theme active, change an accent twice. Check HUD buttons,
+      Active Items, Active Targets and the arrow. Switch guides and check the
+      list cards: Modern must not regain ornate Legacy borders. Keep all tools
+      at their original enabled/disabled states. Test overlapping windows.
+   f. Switch profile (or restore a disposable backup) and inspect visible values
+      and pending Interface Style. No silent style change or automatic reload.
+      Choose Legacy > Later, then reload voluntarily; repeat tabs a-e and check
+      original HUD placement/artwork. Switch back to Modern and check placement.
+   g. At minimum width and a larger font, check all tabs, lists, editors and
+      scrollbars for overlap. Repeat key Durotar quest interactions with Questie
+      tracking enabled and its automation disabled. Capture matched idle,
+      step-change, resize, library-search and settings-open performance reports.
+      EXPECT: tab changes add no directive execution, guide parsing or map
+      rebuilds. Report new errors, input issues or a noticeable performance loss.
+
+New consolidated-hub visual/performance acceptance remains pending until these
+in-game results are recorded. No deliberate Hardcore deaths, server edits or
+Questie modifications are needed.

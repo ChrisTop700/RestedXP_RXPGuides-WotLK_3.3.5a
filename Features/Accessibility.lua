@@ -106,14 +106,16 @@ function accessibility:SetMode(mode)
         profile.textBuyColor = palette.buy
     end
     profile.colorBlindMode = mode
-    addon.settings:LoadTextColors()
-    addon.RenderFrame()
+    if addon.presentation then addon.presentation:RefreshTextColors()
+    else addon.settings:LoadTextColors(); addon.RenderFrame() end
     addon.UpdateMap()
     if addon.targeting and addon.targeting.UpdateTargetFrame then
         pcall(addon.targeting.UpdateTargetFrame, addon.targeting)
     end
-    addon.updateBottomFrame = true
-    addon.updateStepText = true
+    if not (addon.presentation and addon.presentation:IsModern()) then
+        addon.updateBottomFrame = true
+        addon.updateStepText = true
+    end
     return true
 end
 

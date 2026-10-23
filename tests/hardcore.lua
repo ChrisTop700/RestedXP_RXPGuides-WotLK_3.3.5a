@@ -195,6 +195,7 @@ return function(root)
             controls[name] = {SetText = function(_, text) labels[name] = text end}
         end
         hub.CreateFrame = function() return controls end
+        a.libraryTabs = {Open = function(_, tab) assert(tab == "Guides"); controls:Show() end}
         hub.Refresh = noop
         hub.Select = function(self, entry) assert(entry == nil); self.selected = nil end
         hub.selected, hub.favoritesOnly, hub.recentOnly = normal, true, true

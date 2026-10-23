@@ -134,7 +134,11 @@ return function(root,fixtures)
     s.env.GuideName={text=widget()}
     s.env.ScrollChild=widget()
     s.env.ScrollChild.framePool={}
-    s.env.BottomFrame={UpdateFrame=noop}
+    local scrollResets=0
+    s.env.BottomFrame={UpdateFrame=noop,CancelScrollFollow=function(_,reset)
+        assert(reset==true,"Successful guide load must invalidate previous scroll identity")
+        scrollResets=scrollResets+1
+    end}
     s.env.RXPFrame={backdrop={bottom={}},bottomMenu={},GenerateMenuTable=noop}
     a.RXPFrame=s.env.RXPFrame
     s.env.table=setmetatable({wipe=function(t) for k in pairs(t) do t[k]=nil end end},
@@ -169,6 +173,7 @@ return function(root,fixtures)
         callbacks=callbacks+1
     end)
     assert(receipt==destination and callbacks==1 and applied==1 and published==1)
+    assert(scrollResets==1,"Successful load did not cancel the previous guide's pending scroll")
     -- A successful prerequisite redirect still is NOT success for the
     -- originally requested canonical guide, even when the names are identical.
     previous.disabled=nil
@@ -177,6 +182,7 @@ return function(root,fixtures)
     s.env.GetMissingGuideEntryQuest=function(g) if g==destination then return {788} end end
     receipt=a.guideState:Load(destination,true,"manual",function() callbacks=callbacks+1 end)
     assert(receipt==previous and a.currentGuide==previous and data.currentStep==1)
+    assert(scrollResets==2,"Prerequisite destination did not reset scroll identity")
     assert(callbacks==1 and applied==1 and published==2,
         "Prerequisite redirect applied/acknowledged the original destination")
     assert(data.guideProgress[destination.key].step==2,"Redirect destroyed destination checkpoint")

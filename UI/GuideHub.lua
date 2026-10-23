@@ -158,6 +158,14 @@ function hub:GetFilteredGuides()
         local family = addon.hardcoreGuides and addon.hardcoreGuides:GetFamily(guide)
         local familyMatch = not self.hardcoreFamily or
             (family and family.id == self.hardcoreFamily)
+        local original = tostring(entry.canonicalGroup):gsub("^[*+]", ""):find("Original Guides - ", 1, true) == 1
+        local collectionMatch = not self.collection or (self.collection == "original") == original
+        local categoryMatch = not self.category or self.category == "all" or
+            (self.category == "hardcore" and family) or
+            (self.category == "farming" and guide.farm) or
+            (self.category == "endgame" and tostring(entry.canonicalGroup):find("Endgame", 1, true)) or
+            (self.category == "leveling" and not family and not guide.farm and
+                not tostring(entry.canonicalGroup):find("Endgame", 1, true))
         local condition = type(guide.enabledFor) == "string" and
                               guide.enabledFor or ""
         local factionAllowed = ConditionAllows(condition, addon.player.faction,
@@ -174,7 +182,7 @@ function hub:GetFilteredGuides()
         local availabilityMatch = self.availabilityFilter == "all" or
             (self.availabilityFilter == "available" and entry.active) or
             (self.availabilityFilter == "unavailable" and not entry.active)
-        if familyMatch and textMatch and factionMatch and classMatch and levelMatch and
+        if collectionMatch and categoryMatch and familyMatch and textMatch and factionMatch and classMatch and levelMatch and
             availabilityMatch and (not favoritesOnly or favorite) and
             (not recentOnly or recent[entry.key]) then
             entry.favorite = favorite
@@ -194,6 +202,8 @@ end
 function hub:OpenHardcoreGuides(familyId)
     local frame = self:CreateFrame()
     self.hardcoreFamily = familyId or "tbc"
+    self.collection = self.hardcoreFamily == "curated" and "validated" or "original"
+    self.category = "hardcore"
     self.favoritesOnly, self.recentOnly = false, false
     self.factionFilter, self.classFilter = "current", "current"
     self.levelFilter, self.availabilityFilter = "all", "available"
@@ -205,7 +215,7 @@ function hub:OpenHardcoreGuides(familyId)
     if frame.classFilter then frame.classFilter:SetText(L("Class: Current")) end
     if frame.levelFilter then frame.levelFilter:SetText(L("Level: All")) end
     if frame.availabilityFilter then frame.availabilityFilter:SetText(L("Availability: ") .. L("Available")) end
-    frame:Show()
+    addon.libraryTabs:Open("Guides")
     self:Refresh()
 end
 
@@ -227,6 +237,7 @@ function hub:Select(entry)
         self.frame.status:SetText(entry and
             (entry.reason or format("%s / %s", entry.group, entry.name)) or
             "Select a guide")
+        if self.frame.modern then addon.modernLibrary:Details(self) end
     end
     self:RefreshRows()
 end
@@ -252,6 +263,10 @@ function hub:ChooseStep()
             frame.editBox:SetFocus()
         end,
         OnAccept = function(frame, data)
+            -- A changed preview/catalog must not apply an old step-selection
+            -- dialog to a different guide. Loading retains its own mode and
+            -- successful-load checks as well.
+            if not data or not hub.selected or hub.selected.key ~= data.key or not hub.selected.active then return end
             local requested = tonumber(frame.editBox:GetText())
             local guide = data and data.guide
             if not requested or not guide then return end
@@ -277,6 +292,7 @@ end
 
 function hub:RefreshRows()
     if not self.frame or not self.frame:IsShown() then return end
+    if self.frame.modern then return addon.modernLibrary:Rows(self) end
     local filtered = self.filtered or {}
     local offset = FauxScrollFrame_GetOffset(self.frame.scroll)
     FauxScrollFrame_Update(self.frame.scroll, #filtered, VISIBLE_ROWS,
@@ -307,9 +323,19 @@ end
 function hub:Refresh()
     if not RXPData or not RXPCData then return end
     self.guides = BuildGuideList()
+    self:RefreshFilter()
+end
+
+function hub:RefreshFilter()
+    local selectedKey = self.selected and self.selected.key
     self.filtered = self:GetFilteredGuides()
     if self.frame then
         self.frame.count:SetText(format(L("%d guides"), #self.filtered))
+        local selected
+        for _, entry in ipairs(self.filtered) do
+            if entry.key == selectedKey then selected = entry; break end
+        end
+        self:Select(selected)
         self:RefreshRows()
     end
 end
@@ -326,8 +352,11 @@ end
 
 function hub:CreateFrame()
     if self.frame then return self.frame end
+    if addon.presentation and addon.presentation:IsModern() then
+        return addon.modernLibrary:Create(self)
+    end
     local frame = CreateFrame("Frame", "RXPGuideHub", UIParent)
-    frame:SetSize(680, 500)
+    frame:SetSize(680, 536)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetMovable(true)
@@ -346,6 +375,10 @@ function hub:CreateFrame()
     title:SetText(L("RXPGuides Guide Hub"))
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -5, -5)
+
+    local window = frame
+    self.window = window
+    frame = addon.libraryTabs:GuidePage(window)
 
     local search = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
     frame.search = search
@@ -554,9 +587,9 @@ function hub:CreateFrame()
     frame.restart:Disable()
     frame.chooseStep:Disable()
     frame.findStart:Disable()
-    frame:SetScript("OnShow", function() hub:Refresh() end)
-    frame:Hide()
+    window:Hide()
     self.frame = frame
+    addon.libraryTabs:Attach(window, frame)
     table.insert(_G.UISpecialFrames, "RXPGuideHub")
     return frame
 end
@@ -581,6 +614,10 @@ function hub:OnGuidesReady()
 end
 
 function hub:Toggle()
-    local frame = self:CreateFrame()
-    frame:SetShown(not frame:IsShown())
+    self:CreateFrame()
+    if self.window:IsShown() and addon.libraryTabs.selected == "Guides" then
+        self.window:Hide()
+    else
+        addon.libraryTabs:Open("Guides")
+    end
 end

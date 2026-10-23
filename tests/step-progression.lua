@@ -310,9 +310,14 @@ return function(root)
         a.RestoreCharacterGuideProgress = noop
         s.env.RXPCData.guideProgress[guide.key] = saved
         a.guideState:RestoreFlags(guide, saved)
+        a.settings.profile.uiStyle = "modern"
+        a.settings.profile.modernHUD = {width = 345, height = 160, scale = 0.9, collapsed = true,
+            points = {{"LEFT", "UIParent", "LEFT", 12, 30}}}
         local encoded = a.roadmap:BuildBackup()
         local decoded, why = a.roadmap:DecodeBackup(encoded)
         assert(decoded, why)
+        assert(decoded.settings.uiStyle == "modern" and decoded.settings.modernHUD.width == 345 and
+            decoded.settings.modernHUD.points[1][4] == 12, "modern geometry failed backup round trip")
         local backupProgress = decoded.character.guideProgress[guide.key].progress
         assert(a.guideState:ValidateFlags(backupProgress), "progress failed backup round trip")
         s.env.RXPCData.guideProgress.other = {group = "Other", name = "Other"}
@@ -321,6 +326,8 @@ return function(root)
         assert(s.env.RXPCData.guideProgress.other, "merge removed another guide")
         assert(not s.env.RXPCData.guideProgress[guide.key].obsolete, "merge mixed checkpoint layouts")
         assert(a.roadmap:ApplyBackup(decoded, true))
+        assert(a.settings.profile.modernHUD.collapsed and a.settings.profile.modernHUD.scale == 0.9,
+            "replacement lost modern-only appearance")
         assert(not s.env.RXPCData.guideProgress.other, "replace retained unrelated checkpoint")
         backupProgress.version = 999
         local before = s.env.RXPCData.guideProgress

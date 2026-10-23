@@ -32,6 +32,7 @@ Core\Facade.lua
 Guide\QuestAcceptState.lua
 Guide\QuestRewardTransaction.lua
 UI\Themes.lua
+UI\Presentation.lua
 Features\Communications.lua
 Core\Addon.lua
 UI\ToolWindow.lua
@@ -39,6 +40,8 @@ UI\GuideLayout.lua
 UI\GuideWindow.lua
 UI\Help.lua
 UI\Settings.lua
+UI\SettingsAdapter.lua
+UI\FeatureTools.lua
 
 # DB loaded directly with BACKSLASHES (3.3.5a's TOC parser does not reliably
 # accept forward slashes, and it resolves nested-XML <Script> paths relative to
@@ -105,6 +108,8 @@ Guide\Hardcore.lua
 # Staged 3.3.5 feature-roadmap foundation and stock legacy interfaces.
 Features\Roadmap.lua
 UI\GuideHub.lua
+UI\ModernLibrary.lua
+UI\LibraryTabs.lua
 Features\GoldAssistant.lua
 Features\Diagnostics.lua
 Core\Recovery.lua
