@@ -373,6 +373,9 @@ return function(root)
     end
     rootFrame.backdrop = {edge = {}, bottom = {}}
     addon.activeTheme.background = {0.1, 0.2, 0.3}
+    -- Extracted painters run with `env` as their environment and no addon
+    -- parameter, so `addon` must resolve through the sandbox environment.
+    env.addon = addon
     independent.activeItemFrame.UpdateVisuals = setfenv(assert(loadstring(
         Extract("UI/ActiveItemFrame.lua", "local function UpdateIconFrameVisuals", "function addon.CreateActiveItemFrame") ..
         "\nreturn UpdateIconFrameVisuals")), env)()
