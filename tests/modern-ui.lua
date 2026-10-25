@@ -103,6 +103,22 @@ return function(root)
         IsQuestRewardSettlementActive = function() return events.reward end,
         comms = {PrettyPrint = function() end}, guideState = {Load = function() calls.load = calls.load + 1 end},
         SetFontSafely = function(f, path, size) f:SetFont(path, size) end}
+    -- Transparent-theme helpers live in UI/Themes.lua, which this sandbox does
+    -- not load. The extracted ActiveItemFrame/Targeting painters call into
+    -- them, so provide behaviour-compatible stand-ins: with a nil GetSurfaceAlpha
+    -- the painter would abort after SetBackdrop, leaving the default white fill.
+    addon.IsThemeTransparent = function() return false end
+    addon.GetSurfaceAlpha = function(default) return default end
+    addon.GetThemedBackground = function()
+        local theme = addon.activeTheme or addon.colors
+        return (theme and theme.background) or {0.035, 0.04, 0.075, 1}
+    end
+    addon.SetThemedBackdrop = function(frame, backdrop, color, alpha)
+        if not (frame and frame.SetBackdrop) then return end
+        local c = color or addon.GetThemedBackground()
+        frame:SetBackdrop(backdrop)
+        frame:SetBackdropColor(c[1] or 0, c[2] or 0, c[3] or 0, alpha or c[4] or 1)
+    end
     addon.GetTexture = function(name) return "Textures/" .. name end
     addon.SetResizeBounds = function(f, w, h) f.minWidth, f.minHeight = w, h end
     local function load(path)
@@ -350,6 +366,8 @@ return function(root)
     end
     local function Extract(path, first, last)
         local file = assert(io.open(root .. "/" .. path)); local text = file:read("*a"); file:close()
+        -- Checkouts may use CRLF while the anchors below assume the committed LF.
+        text = text:gsub("\r\n", "\n")
         local a = assert(text:find(first, 1, true)); local b = assert(text:find(last, a, true))
         return text:sub(a, b - 1)
     end
@@ -382,7 +400,7 @@ return function(root)
     -- Run the real row-recycling backdrop block, then the production skin.
     local pooled = object(); view:Skin(pooled, true)
     env.frame = pooled
-    local reset = Extract("UI/GuideWindow.lua", "        frame:ClearBackdrop()\n        frame.rxpModernBackdrop = nil", "        ApplyStepVisualState")
+    local reset = Extract("UI/GuideWindow.lua", "        frame:ClearBackdrop()\n        -- Pooled rows must be reskinned after the legacy reset. Guarded: guide\n        -- loading is also exercised in embedded sandboxes (validation tests)\n        -- that never load the theme runtime.\n        frame.rxpModernBackdrop = nil", "        ApplyStepVisualState")
     setfenv(assert(loadstring(reset)), env)()
     view:Skin(pooled, true)
     check(pooled.backdrop == view.backdrop, "recycled rows cannot retain Legacy borders")

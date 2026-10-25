@@ -37,6 +37,21 @@ return function(root,fixtures)
     local prompt
     a.comms={PrettyDebug=function() end,PrettyPrint=function() end,
         ConfirmChoice=function(_,_,_,fn) prompt=fn end}
+    -- The loader repaints pooled rows via the theme runtime. The fixture addon
+    -- has no UI/Themes.lua, so provide the same stand-ins the sandbox env uses.
+    a.IsThemeTransparent=function() return false end
+    a.GetThemedBackground=function()
+        return (a.colors and a.colors.background) or {0.035, 0.04, 0.075, 1}
+    end
+    a.SetThemedBackdrop=function(frame, backdrop, color, alpha)
+        -- The audit fixture's frames are plain mocks without backdrop methods;
+        -- the loader only needs the call to be side-effect free here.
+        if not (frame and frame.SetBackdropColor) then return end
+        local c = color or a.GetThemedBackground()
+        if frame.SetBackdrop then frame:SetBackdrop(backdrop) end
+        frame:SetBackdropColor(c[1] or 0, c[2] or 0, c[3] or 0, alpha or c[4] or 1)
+    end
+    a.SetFontSafely=function(f, path, size) if f and f.SetFont then f:SetFont(path, size) end end
     s.env.addon=a
     s.env.fmt=string.format
     s.env.GetMissingGuideEntryQuest=function() return {788} end
@@ -126,14 +141,30 @@ return function(root,fixtures)
         w.CreateFontString=widget
         return w
     end
-    s.env.CreateFrame=widget
-    s.env.CloseDropDownMenus=noop
-    s.env.L=function(text) return text end
-    s.env.IsFrameShown=function() return true end
-    s.env.ApplyStepVisualState=noop
-    s.env.GuideName={text=widget()}
-    s.env.ScrollChild=widget()
-    s.env.ScrollChild.framePool={}
+        s.env.CreateFrame=widget
+        s.env.CloseDropDownMenus=noop
+        s.env.L=function(text) return text end
+        s.env.IsFrameShown=function() return true end
+        -- The loader repaints pooled rows with the theme runtime's backdrop
+        -- helper. Provide behaviour-compatible stand-ins: the sandbox has no
+        -- UI/Themes.lua, and a missing helper would abort the load mid-way,
+        -- leaving SetBackdrop's default white fill behind.
+        s.env.IsThemeTransparent=function() return false end
+        s.env.GetThemedBackground=function()
+            return (a.colors and a.colors.background) or {0.035, 0.04, 0.075, 1}
+        end
+        s.env.SetThemedBackdrop=function(frame, backdrop, color, alpha)
+            if not (frame and frame.SetBackdrop) then return end
+            local c = color or s.env.GetThemedBackground()
+            frame:SetBackdrop(backdrop)
+            frame:SetBackdropColor(c[1] or 0, c[2] or 0, c[3] or 0, alpha or c[4] or 1)
+        end
+        s.env.SetFontSafely=function(f, path, size) if f and f.SetFont then f:SetFont(path, size) end end
+        s.env.ApplyStepVisualState=noop
+        s.env.GuideName={text=widget()}
+        s.env.ScrollChild=widget()
+        s.env.ScrollChild.framePool={}
+
     local scrollResets=0
     s.env.BottomFrame={UpdateFrame=noop,CancelScrollFollow=function(_,reset)
         assert(reset==true,"Successful guide load must invalidate previous scroll identity")

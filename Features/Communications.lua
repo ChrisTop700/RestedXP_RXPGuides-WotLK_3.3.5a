@@ -632,7 +632,12 @@ Arrow data
     f:AddChild(f.scrollContainer)
 
     f.frame:SetBackdrop(addon.RXPFrame.backdrop.edge)
-    f.frame:SetBackdropColor(unpack(addon.GetWindowBackground()))
+    -- GetWindowBackground lives in UI/Themes.lua; fall back to the plain theme
+    -- colour when this module is exercised outside the full addon runtime.
+    local windowBackground = addon.GetWindowBackground and
+                                 addon.GetWindowBackground() or
+                             addon.colors.background
+    f.frame:SetBackdropColor(unpack(windowBackground))
 
     local editbox = AceGUI:Create("MultiLineEditBox")
     editbox:SetLabel(L("Join our support discord at discord.gg/RestedXP and copy paste this form into #bug-report"))
@@ -660,7 +665,12 @@ function addon.comms.OpenBrandedExport(title, description, content, width, heigh
     f:SetTitle("RestedXP: " .. title)
 
     f.frame:SetBackdrop(addon.RXPFrame.backdrop.edge)
-    f.frame:SetBackdropColor(unpack(addon.GetWindowBackground()))
+    -- SameThemes fallback keeps the fixture sandboxes (which stub addon.colors
+    -- directly) working without the full theme runtime.
+    local exportBackground = addon.GetWindowBackground and
+                                 addon.GetWindowBackground() or
+                             addon.colors.background
+    f.frame:SetBackdropColor(unpack(exportBackground))
 
     local editbox = AceGUI:Create("MultiLineEditBox")
     editbox:SetLabel(description)

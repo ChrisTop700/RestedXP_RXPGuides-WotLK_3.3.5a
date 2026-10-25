@@ -56,7 +56,7 @@ end
 -- forward-declared: a local declared further down is not in scope here, and
 -- the name would otherwise resolve to a nil global mid-recursion.
 local SetTreeFrameLevel
-local function SetTreeFrameLevelChildren(frame, base, depth, root, changed)
+local function SetTreeFrameLevelChildren(frame, base, depth, root, changed, force)
     if frame.rxpPooledContent then return changed end
     if frame ~= root and frame.HookScript and not frame.rxpToolLayerHook then
         frame.rxpToolLayerHook = true
@@ -66,30 +66,30 @@ local function SetTreeFrameLevelChildren(frame, base, depth, root, changed)
     if not frame.GetChildren then return changed end
     local children = {frame:GetChildren()}
     for _, child in ipairs(children) do
-        changed = SetTreeFrameLevel(child, base, depth + 1, root, changed)
+        changed = SetTreeFrameLevel(child, base, depth + 1, root, changed, force)
     end
     return changed
 end
 
-function SetTreeFrameLevel(frame, base, depth, root, changed)
+function SetTreeFrameLevel(frame, base, depth, root, changed, force)
     if not (frame and frame.SetFrameLevel) then return changed end
     root = root or frame
     local level = base + min(depth, 8)
-    if frame.GetFrameLevel and frame:GetFrameLevel() == level then
-        return SetTreeFrameLevelChildren(frame, base, depth, root, changed)
+    if not force and frame.GetFrameLevel and frame:GetFrameLevel() == level then
+        return SetTreeFrameLevelChildren(frame, base, depth, root, changed, force)
     end
     frame:SetFrameLevel(level)
     changed = changed or {}
     changed[#changed + 1] = frame
-    return SetTreeFrameLevelChildren(frame, base, depth, root, changed)
+    return SetTreeFrameLevelChildren(frame, base, depth, root, changed, force)
 end
 
-function manager:RefreshLayering()
+function manager:RefreshLayering(force)
     if addon.PerfCount then addon.PerfCount("tool layering passes") end
     -- Re-leveling a frame makes 3.3.5a rebuild its backdrop with an opaque
     -- white fill, so a layering pass that runs mid-drag paints every window
     -- the drag re-bands. Defer the whole pass until the drag ends.
-    if self.dragActive then
+    if self.dragActive and not force then
         self.pendingLayering = true
         return
     end
@@ -105,7 +105,7 @@ function manager:RefreshLayering()
     -- window's backdrop when both use the DIALOG strata.
     local changed
     for index, frame in ipairs(compact) do
-        changed = SetTreeFrameLevel(frame, 40 + index * 16, 0, nil, changed)
+        changed = SetTreeFrameLevel(frame, 40 + index * 16, 0, nil, changed, force)
     end
     if changed then
         for _, frame in ipairs(changed) do
@@ -127,7 +127,7 @@ function manager:BringToFront(frame, force)
         end
     end
     self.layerOrder[#self.layerOrder + 1] = frame
-    self:RefreshLayering()
+    self:RefreshLayering(force)
 end
 
 local function PreventEscapeClose(name)

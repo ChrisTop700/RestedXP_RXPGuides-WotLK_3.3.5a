@@ -2861,8 +2861,13 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
             frame:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -3)
         end
         frame:ClearBackdrop()
-        frame.rxpModernBackdrop = nil -- pooled rows must be reskinned after the legacy reset
-        addon.SetThemedBackdrop(frame, RXPFrame.backdrop.bottom)
+        -- Pooled rows must be reskinned after the legacy reset. Guarded: guide
+        -- loading is also exercised in embedded sandboxes (validation tests)
+        -- that never load the theme runtime.
+        frame.rxpModernBackdrop = nil
+        if addon.SetThemedBackdrop then
+            addon.SetThemedBackdrop(frame, RXPFrame.backdrop.bottom)
+        end
         ApplyStepVisualState(frame, step, true)
 
         frame:SetScript("OnEnter", function(self)
