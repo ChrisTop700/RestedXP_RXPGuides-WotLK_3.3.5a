@@ -45,6 +45,7 @@ local function SetTipsFont(region, size)
     if region and not select(1, region:GetFont()) then
         region:SetFont("Fonts\\FRIZQT__.TTF", size, "")
     end
+    if region and addon.ApplyFontShadow then addon.ApplyFontShadow(region) end
 end
 
 function addon.tips:RefreshCheckTicker()
@@ -159,12 +160,10 @@ function addon.tips:CreateTipsFrame()
 
     frame.UpdateVisuals = function(this)
         this:ClearBackdrop()
-        this:SetBackdrop(addon.RXPFrame.backdrop.edge)
-        local r, g, b = unpack(addon.colors.background)
-        this:SetBackdropColor(r, g, b, 0.82)
+        addon.SetThemedBackdrop(this, addon.RXPFrame.backdrop.edge, nil,
+                                addon.GetSurfaceAlpha(0.82))
         this.title:ClearBackdrop()
-        this.title:SetBackdrop(addon.RXPFrame.backdrop.edge)
-        this.title:SetBackdropColor(unpack(addon.colors.background))
+        addon.SetThemedBackdrop(this.title, addon.RXPFrame.backdrop.edge)
         SetTipsFont(this.title.text, 9)
         this.title.text:SetTextColor(unpack(addon.activeTheme.textColor))
         this.title:SetSize(this.title.text:GetStringWidth() + 14, 19)
@@ -174,6 +173,7 @@ function addon.tips:CreateTipsFrame()
         end
     end
     frame:UpdateVisuals()
+    addon.EnsureVisualsOnShow(frame)
 
     self.tipsFrame = frame
     return frame

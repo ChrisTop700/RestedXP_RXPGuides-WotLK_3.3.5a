@@ -2513,28 +2513,44 @@ function addon.settings:CreateAceOptionsPanel()
                     },
                     xprate = {
                         name = L("Experience rates"),
-                        desc = L(
-                            "Adjusts the guide routes to match increased xp rate bonuses"),
+                        desc = function()
+                            if addon.game == "RETAIL" then
+                                return L(
+                                    "Adjusts the guide routes to match increased xp rate bonuses")
+                            end
+                            -- The confirm popup would fire on every slider
+                            -- step, making the rate impossible to tune, so
+                            -- the warning lives here instead.
+                            return L(
+                                "Adjusts the guide routes to match the server's experience rate (check .xp view to see it). Sliding this turns off automatic detection; re-enable Detect Rate to go back to auto. Rates above 1x may hide chapters and skip steps you out-level")
+                        end,
                         type = "range",
                         width = optionsWidth,
                         order = 1.2,
                         min = 1,
-                        max = addon.game == "RETAIL" and 5 or 2,
+                        max = (addon.game == "RETAIL" or
+                            addon.game == "WOTLK") and 5 or 2,
                         step = 0.05,
                         isPercent = true,
-                        confirm = function()
-                            return L(
-                                       "Notice: Changing experience rates beyond 1x may cause some chapters to become hidden and certain steps may automatically skip as you out level them") -- TODO locale
-                        end,
-                        set = function(info, value)
-                            SetProfileOption(info, value)
+                        set = function(_, value)
+                            -- Write the profile directly: the Legacy335
+                            -- AceConfigDialog passes its pooled info table
+                            -- through the confirm popup, which can arrive
+                            -- wiped (info[#info] == nil), so SetProfileOption
+                            -- would throw "table index is nil" and the value
+                            -- would revert.
+                            addon.settings.profile.xprate = value
+                            -- Manual override: stop auto-detection from
+                            -- snapping the slider back to the buff-only rate.
+                            if value > 1 then
+                                addon.settings.profile.enableAutomaticXpRate =
+                                    false
+                            end
                             addon.ReloadGuide()
                             addon.RXPFrame.GenerateMenuTable()
                         end,
                         hidden = addon.game == "CLASSIC",
-                        disabled = function()
-                            return addon.settings.profile.enableAutomaticXpRate
-                        end
+                        disabled = false
                     },
                     enableXpStepSkipping = {
                         name = L("Skip overleveled steps"),
@@ -4489,6 +4505,30 @@ function addon.settings:CreateAceOptionsPanel()
                         width = optionsWidth,
                         order = 1.92
                     },
+                    fontShadow = {
+                        name = L("Font Shadow"),
+                        desc = L("Draw a 1 pixel drop shadow behind guide text for readability over the world."),
+                        type = "toggle",
+                        width = optionsWidth,
+                        order = 1.94,
+                        get = function()
+                            return addon.IsFontShadowEnabled()
+                        end,
+                        set = function(_, value)
+                            -- Store nil when the choice matches the theme default
+                            -- so switching themes keeps that theme's own look.
+                            local theme = addon.activeTheme or {}
+                            local themed = theme.fontShadow == true
+                            value = value and true or false
+                            if value == themed then
+                                self.profile.fontShadow = nil
+                            else
+                                self.profile.fontShadow = value
+                            end
+                            addon.RefreshFontShadow()
+                            AceConfigRegistry:NotifyChange(addon.title)
+                        end
+                    },
                     previewFramePositions = {
                         name = fmt("%s Frame Positions", _G.PREVIEW),
                         desc = fmt("%s Frame Positions", _G.PREVIEW),
@@ -4793,8 +4833,8 @@ function addon.settings:CreateAceOptionsPanel()
                         step = 1,
                         set = function(info, value)
                             SetProfileOption(info, value)
-                            addon.arrowFrame.text:SetFont(addon.font, value,
-                                                          "OUTLINE")
+                            addon.SetFontSafely(addon.arrowFrame.text,
+                                                addon.font, value, "OUTLINE")
                         end
                     },
                     resetArrowPosition = {
@@ -5587,6 +5627,48 @@ function addon.settings:DetectXPRate(softUpdate)
 
         addon.RXPFrame.GenerateMenuTable()
 
+        return
+    end
+
+    -- Private servers: the effective rate is the server modifier (visible via
+    -- .xp view), which is invisible to the buff scan. Prefer the measured
+    -- mob-kill multiplier from the XP assistant calibration when it has enough
+    -- samples; otherwise leave the current rate alone instead of snapping it
+    -- back to the buff-only value.
+    if addon.gameVersion == 30300 then
+        local assistant = addon.xpAssistant
+        local multiplier, samples, lowConfidence
+        if assistant and addon.settings.profile.adaptiveMobXP ~= false then
+            local progress = assistant.GetProgress and assistant:GetProgress()
+            if progress and progress.level then
+                multiplier, samples, lowConfidence =
+                    assistant:GetCalibration(progress.level,
+                                             assistant:GetContent())
+            end
+        end
+        if multiplier and not lowConfidence and samples >= 3 then
+            local rate = math.max(1, math.floor(multiplier * 100 + 0.5) / 100)
+            if fmt("%.2f", addon.settings.profile.xprate) == fmt("%.2f", rate) then
+                return
+            end
+            addon.settings.profile.xprate = rate
+            if addon.xpAssistant then
+                addon.xpAssistant:ResetCalibration(false, true)
+            end
+            if not softUpdate then
+                addon.comms.PrettyPrint(L(
+                    "Measured experience rate of %.2fx from recent kills, reloading guide"),
+                    rate)
+                if addon.currentGuide and addon.currentGuide.name then
+                    addon:LoadGuide(addon.currentGuide, 'onLoad')
+                else
+                    addon.ReloadGuide()
+                end
+                addon.RXPFrame.GenerateMenuTable()
+            end
+            return
+        end
+        -- No confident measurement yet: keep the user's slider where it is.
         return
     end
 

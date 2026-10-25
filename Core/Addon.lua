@@ -2496,8 +2496,8 @@ function addon:OnInitialize()
     addon.RXPFrame:SetScale(addon.presentation and addon.presentation:GetScale() or addon.settings.profile.windowScale)
     addon.arrowFrame:SetSize(32 * addon.settings.profile.arrowScale,
                              32 * addon.settings.profile.arrowScale)
-    addon.arrowFrame.text:SetFont(addon.font,
-                                  addon.settings.profile.arrowText, "OUTLINE")
+    addon.SetFontSafely(addon.arrowFrame.text, addon.font,
+                        addon.settings.profile.arrowText, "OUTLINE")
     addon.activeItemFrame:SetScale(addon.settings.profile.activeItemsScale)
 end
 

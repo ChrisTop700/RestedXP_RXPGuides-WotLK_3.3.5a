@@ -20,6 +20,26 @@ end
 
 addon.width, addon.height = 235, 125 -- Default width/height
 
+-- Banner art bakes the theme background into the texture, so themes that are
+-- see-through (Transparent) skip it and keep only the logo/cog controls.
+-- 3.3.5a's Texture:SetTexture(nil) leaves the region filled solid white, so
+-- hide the region instead of clearing it.
+local function ThemeBanner()
+    if addon.IsThemeTransparent and addon.IsThemeTransparent() then return nil end
+    return addon.GetTexture("rxp-banner")
+end
+
+local function ApplyBannerTexture(region)
+    if not region then return end
+    local banner = ThemeBanner()
+    if banner then
+        region:Show()
+        region:SetTexture(banner)
+    else
+        region:Hide()
+    end
+end
+
 local RXPFrame = CreateFrame("Frame", "RXPFrame", UIParent, BackdropTemplate)
 addon.RXPFrame = RXPFrame
 addon.enabledFrames["RXPFrame"] = RXPFrame
@@ -92,25 +112,23 @@ function RXPFrame:UpdateVisuals()
     end
     addon.guideLayout:Invalidate()
     BottomFrame:ClearBackdrop()
-    BottomFrame:SetBackdrop(RXPFrame.backdrop.edge)
-    BottomFrame:SetBackdropColor(unpack(addon.colors.background))
+    addon.SetThemedBackdrop(BottomFrame, RXPFrame.backdrop.edge)
 
     if RXPFrame.activeItemFrame then
         RXPFrame.activeItemFrame:ClearBackdrop()
-        RXPFrame.activeItemFrame:SetBackdrop(RXPFrame.backdrop.edge)
-        RXPFrame.activeItemFrame:SetBackdropColor(
-            unpack(addon.colors.background))
+        addon.SetThemedBackdrop(RXPFrame.activeItemFrame,
+                                RXPFrame.backdrop.edge)
     end
 
     GuideName:ClearBackdrop()
-    GuideName:SetBackdrop(RXPFrame.backdrop.guideName)
-    GuideName:SetBackdropColor(unpack(addon.colors.background))
+    addon.SetThemedBackdrop(GuideName, RXPFrame.backdrop.guideName)
     Footer:ClearBackdrop()
-    Footer:SetBackdrop(RXPFrame.backdrop.guideName)
-    Footer:SetBackdropColor(unpack(addon.colors.background))
-    Footer.bg:SetTexture(addon.GetTexture("rxp-banner"))
+    addon.SetThemedBackdrop(Footer, RXPFrame.backdrop.guideName)
+    -- The banner art bakes in the theme background, so a transparent theme
+    -- leaves it off and keeps only the logo/cog controls.
+    ApplyBannerTexture(Footer.bg)
 
-    GuideName.bg:SetTexture(addon.GetTexture("rxp-banner"))
+    ApplyBannerTexture(GuideName.bg)
     GuideName.icon:SetTexture(addon.GetTexture("rxp_logo-64"))
     GuideName.classIcon:SetTexture(addon.GetTexture(class))
     Footer.cog:SetNormalTexture(addon.GetTexture("rxp_cog-32"))
@@ -134,6 +152,10 @@ function addon.RenderFrame(themeUpdate,isLoading)
             frame:UpdateVisuals(true)
         end
     end
+    -- Frames painted while hidden can keep the white fill that 3.3.5a applies
+    -- when SetBackdrop runs, until something forces a rebuild. Repeat the pass
+    -- once the frame has actually drawn.
+    addon.RepaintThemedFrames()
     if addon.toolWindows and addon.toolWindows.RefreshVisuals then
         addon.toolWindows:RefreshVisuals()
     end
@@ -186,11 +208,9 @@ RXPFrame.backdrop.bottom = {
 function addon.SetupGuideWindow()
     -- These were in-line, but now rely on settings
 
-    BottomFrame:SetBackdrop(RXPFrame.backdrop.edge)
-    BottomFrame:SetBackdropColor(unpack(addon.colors.background))
+    addon.SetThemedBackdrop(BottomFrame, RXPFrame.backdrop.edge)
 
-    GuideName:SetBackdrop(RXPFrame.backdrop.guideName)
-    GuideName:SetBackdropColor(unpack(addon.colors.background))
+    addon.SetThemedBackdrop(GuideName, RXPFrame.backdrop.guideName)
 
     addon.SetFontSafely(GuideName.text, addon.font, 11, "")
     GuideName.text:SetText(L(
@@ -209,11 +229,10 @@ function addon.SetupGuideWindow()
     Footer.text:SetText(releaseText)
     Footer.text:SetTextColor(unpack(addon.activeTheme.textColor))
 
-    GuideName.bg:SetTexture(addon.GetTexture("rxp-banner"))
+    ApplyBannerTexture(GuideName.bg)
 
-    Footer:SetBackdrop(RXPFrame.backdrop.guideName)
-    Footer:SetBackdropColor(unpack(addon.colors.background))
-    Footer.bg:SetTexture(addon.GetTexture("rxp-banner"))
+    addon.SetThemedBackdrop(Footer, RXPFrame.backdrop.guideName)
+    ApplyBannerTexture(Footer.bg)
 
     GuideName.icon:SetTexture(addon.GetTexture("rxp_logo-64"))
 
@@ -660,13 +679,17 @@ local function ApplyStepVisualState(frame, step, bottom)
     local visuals = addon.accessibility and
                         addon.accessibility:GetStepVisuals() or stepVisuals
     local visual = visuals[state]
+    local transparent = addon.IsThemeTransparent and addon.IsThemeTransparent()
     local background = visual and visual.background or
                            (bottom and addon.colors.bottomFrameBG or
                                addon.colors.background)
     local textColor = visual and visual.text or addon.activeTheme.textColor
 
     if addon.presentation and addon.presentation:IsModern() then
-        addon.presentation:Skin(frame, true)
+        -- Step rows and objective cards are HUD content: skin them without the
+        -- card plate so a see-through theme keeps them backdrop-less (the
+        -- transparent branch below then paints only text colours).
+        addon.presentation:Skin(frame, not transparent)
         -- Keep progress/accessibility colours as an accent, not a solid slab.
         if addon.settings.profile.activeTheme == "Default" and
             (addon.settings.profile.colorBlindMode or "off") == "off" then
@@ -675,7 +698,28 @@ local function ApplyStepVisualState(frame, step, bottom)
                 surface[2] * 0.8 + background[2] * 0.2,
                 surface[3] * 0.8 + background[3] * 0.2, surface[4]}
         end
-        frame:SetBackdropBorderColor(textColor[1], textColor[2], textColor[3], 0.55)
+        if not transparent then
+            frame:SetBackdropBorderColor(textColor[1], textColor[2],
+                textColor[3], 0.55)
+        end
+    end
+
+    -- A see-through theme keeps the state colours on the text (fonts are never
+    -- altered) and leaves both the row fill and its outline empty, so the guide
+    -- reads as text drawn straight over the world. The Skin pass above already
+    -- removed the backdrop, so no colour is written here either.
+    if transparent then
+        frame.stepVisualState = state
+        if frame.number and frame.number.text then
+            frame.number.text:SetTextColor(unpack(textColor))
+            if addon.accessibility then
+                addon.accessibility:ApplyStepNumber(frame.number, step, state)
+            end
+        end
+        if bottom and frame.text then
+            frame.text:SetTextColor(unpack(textColor))
+        end
+        return
     end
 
     frame.stepVisualState = state
@@ -1096,18 +1140,16 @@ function addon.SetStep(n, n2, loopback)
             stepframe.number.text:SetJustifyV("MIDDLE")
             stepframe.number.text:SetTextColor(
                 unpack(addon.activeTheme.textColor))
-            stepframe.number.text:SetFont(addon.font, addon.settings.profile
-                                              .guideFontSize, "")
+            addon.SetFontSafely(stepframe.number.text, addon.font,
+                                addon.settings.profile.guideFontSize, "")
         end
         if stepframe.theme ~= addon.activeTheme then
             stepframe.rxpModernBackdrop = nil
             stepframe.theme = addon.activeTheme
             stepframe:ClearBackdrop()
-            stepframe:SetBackdrop(RXPFrame.backdrop.edge)
-            stepframe:SetBackdropColor(unpack(addon.colors.background))
+            addon.SetThemedBackdrop(stepframe, RXPFrame.backdrop.edge)
             stepframe.number:ClearBackdrop()
-            stepframe.number:SetBackdrop(RXPFrame.backdrop.edge)
-            stepframe.number:SetBackdropColor(unpack(addon.colors.background))
+            addon.SetThemedBackdrop(stepframe.number, RXPFrame.backdrop.edge)
         end
 
         local titletext
@@ -1183,8 +1225,9 @@ function addon.SetStep(n, n2, loopback)
                 elementFrame.text:SetTextColor(
                     unpack(addon.activeTheme.textColor))
 
-                elementFrame.text:SetFont(addon.font, addon.settings.profile
-                                              .guideFontSize + 2, "") -- 11
+                addon.SetFontSafely(elementFrame.text, addon.font,
+                                    addon.settings.profile.guideFontSize + 2,
+                                    "") -- 11
 
                 elementFrame.icon =
                     elementFrame:CreateFontString(nil, "OVERLAY")
@@ -1520,7 +1563,11 @@ function CurrentStepFrame.UpdateText(languageRefresh)
                     stepframe.rxpModernTitle = nil
                     stepframe.number:ClearAllPoints()
                     stepframe.number:SetPoint("TOPLEFT", stepframe, 7, 5)
-                    stepframe.number:SetBackdrop(RXPFrame.backdrop.edge)
+                    -- Pair the backdrop with its colour: on 3.3.5a SetBackdrop
+                    -- alone leaves the WHITE8X8 fill opaque white.
+                    stepframe.number:ClearBackdrop()
+                    addon.SetThemedBackdrop(stepframe.number,
+                                            RXPFrame.backdrop.edge)
                     stepframe.number.text:ClearAllPoints()
                     stepframe.number.text:SetWidth(0)
                     stepframe.number.text:SetHeight(0)
@@ -2796,7 +2843,7 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
         frame.bottom = true
         frame:Show()
         frame.step = step
-        frame:SetAlpha(0.66)
+        frame:SetAlpha(addon.IsThemeTransparent and addon.IsThemeTransparent() and 1 or 0.66)
         frame:ClearAllPoints()
         frame.rxpRowOffset, frame.rxpRowHeight, frame.rxpRowGutter = nil, nil, nil
         local anchor
@@ -2815,7 +2862,7 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
         end
         frame:ClearBackdrop()
         frame.rxpModernBackdrop = nil -- pooled rows must be reskinned after the legacy reset
-        frame:SetBackdrop(RXPFrame.backdrop.bottom)
+        addon.SetThemedBackdrop(frame, RXPFrame.backdrop.bottom)
         ApplyStepVisualState(frame, step, true)
 
         frame:SetScript("OnEnter", function(self)
@@ -2884,8 +2931,8 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
             frame.number.text:SetJustifyH("CENTER")
             frame.number.text:SetJustifyV("MIDDLE")
             frame.number.text:SetTextColor(unpack(addon.activeTheme.textColor))
-            frame.number.text:SetFont(addon.font, addon.settings.profile
-                                          .guideFontSize - 1, "") -- 8
+            addon.SetFontSafely(frame.number.text, addon.font,
+                                addon.settings.profile.guideFontSize - 1, "") -- 8
             local prefix = ""
             if n < 10 then prefix = "0" end
             frame.number.text:SetText(prefix .. tostring(n))
@@ -2899,8 +2946,8 @@ function addon:LoadGuide(guide, OnLoad, loadSource, redirectTrail, selection)
         frame.text:SetJustifyH("LEFT")
         frame.text:SetJustifyV("TOP")
         frame.text:SetTextColor(unpack(addon.activeTheme.textColor))
-        frame.text:SetFont(addon.font, addon.settings.profile.guideFontSize,
-                           "")
+        addon.SetFontSafely(frame.text, addon.font,
+                            addon.settings.profile.guideFontSize, "")
 
         -- frame.text:SetHeight(1000)
 
@@ -4008,23 +4055,26 @@ function addon.UpdateGuideFontSize(presentationOnly)
 
     for _, stepFrame in ipairs(CurrentStepFrame.framePool or {}) do
         if stepFrame.number and stepFrame.number.text then
-            stepFrame.number.text:SetFont(addon.font, size, "")
+            addon.SetFontSafely(stepFrame.number.text, addon.font, size, "")
             stepFrame.number:SetHeight(math.max(17, size + 8))
         end
         for _, elementFrame in ipairs(stepFrame.elements or {}) do
             if elementFrame.text then
-                elementFrame.text:SetFont(addon.font, size + 2, "")
+                addon.SetFontSafely(elementFrame.text, addon.font, size + 2, "")
             end
         end
     end
 
     for _, frame in ipairs(ScrollChild.framePool or {}) do
         if frame.number and frame.number.text then
-            frame.number.text:SetFont(addon.font, math.max(1, size - 1), "")
+            addon.SetFontSafely(frame.number.text, addon.font,
+                                math.max(1, size - 1), "")
             frame.number:SetSize(frame.number.text:GetStringWidth() + 2,
                                  math.max(10, size + 2))
         end
-        if frame.text then frame.text:SetFont(addon.font, size, "") end
+        if frame.text then
+            addon.SetFontSafely(frame.text, addon.font, size, "")
+        end
     end
 
     if presentationOnly then return end

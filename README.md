@@ -15,7 +15,7 @@ Follow step-by-step Alliance and Horde leveling guides through level 80, with na
 - **Quest assistance:** configurable auto-accept, turn-in and reward handling, plus guide-related target and item buttons.
 - **Character support:** talent guidance, equipment recommendations, quest-reward comparisons, junk management and vendor repairs.
 - **Optional tools:** XP estimates, Attack Timer, leveling splits, Hunter assistance, speedrunning tools and more.
-- **Personalization:** themes, fonts, window sizing, optional translations and separate guide progress for each character.
+- **Personalization:** themes (including a see-through **Transparent** theme with a toggleable font shadow), fonts, window sizing, optional translations and separate guide progress for each character.
 
 Enable only the extras you want in **Settings → Feature Tools**. Each tool's page explains its purpose and controls. See [the feature reference](FEATURES_335.md) for more tools and commands.
 
@@ -79,6 +79,10 @@ Three optional level-1–60 families appear alongside the regular guides:
 Selecting a Hardcore guide requests confirmation to enable Hardcore mode. Families keep independent progress. Choose a non-Hardcore guide before disabling the mode while a Hardcore-only guide is active.
 
 **These are experimental deathless-oriented routes, not enforced server rules or a guarantee of survival.** Later chapters have not all received complete gameplay testing. The normal Death Knight starter remains separate.
+
+### Appearance and the Transparent theme
+
+**Settings → Look and Feel → Choose Theme** lists the built-in themes. The **Transparent** theme removes the guide window's filled background and border art so only the text, icons and progress accents remain; step text keeps its theme colours and gains a 1-pixel drop shadow for legibility over the world. The **Font Shadow** toggle next to the theme selector turns that shadow on or off and applies to any theme. Settings, tool and report windows stay opaque so they remain readable, while the guide HUD, tips, targeting/item panels and the level-split tracker follow the theme.
 
 ## Compatibility and troubleshooting
 

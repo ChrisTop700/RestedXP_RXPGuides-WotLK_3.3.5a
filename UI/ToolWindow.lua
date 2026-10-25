@@ -47,25 +47,52 @@ local function Clamp(value, low, high)
     return max(low, min(high, value))
 end
 
-local function SetTreeFrameLevel(frame, base, depth, root)
-    if not (frame and frame.SetFrameLevel) then return end
-    root = root or frame
-    frame:SetFrameLevel(base + min(depth, 8))
-    if frame.rxpPooledContent then return end
+-- 3.3.5a re-creates a frame's backdrop (resetting its fill to opaque white)
+-- whenever SetFrameLevel actually changes the level. Re-leveling runs on every
+-- BringToFront -- i.e. the moment a window is grabbed -- so redundant level
+-- writes made every tool window flash white while it was being moved. Only
+-- write levels that genuinely change, and re-apply visuals to the frames that
+-- did change. The two walkers recurse into each other, so SetTreeFrameLevel is
+-- forward-declared: a local declared further down is not in scope here, and
+-- the name would otherwise resolve to a nil global mid-recursion.
+local SetTreeFrameLevel
+local function SetTreeFrameLevelChildren(frame, base, depth, root, changed)
+    if frame.rxpPooledContent then return changed end
     if frame ~= root and frame.HookScript and not frame.rxpToolLayerHook then
         frame.rxpToolLayerHook = true
         frame:HookScript("OnEnter", function() manager:BringToFront(root) end)
         frame:HookScript("OnMouseDown", function() manager:BringToFront(root) end)
     end
-    if not frame.GetChildren then return end
+    if not frame.GetChildren then return changed end
     local children = {frame:GetChildren()}
     for _, child in ipairs(children) do
-        SetTreeFrameLevel(child, base, depth + 1, root)
+        changed = SetTreeFrameLevel(child, base, depth + 1, root, changed)
     end
+    return changed
+end
+
+function SetTreeFrameLevel(frame, base, depth, root, changed)
+    if not (frame and frame.SetFrameLevel) then return changed end
+    root = root or frame
+    local level = base + min(depth, 8)
+    if frame.GetFrameLevel and frame:GetFrameLevel() == level then
+        return SetTreeFrameLevelChildren(frame, base, depth, root, changed)
+    end
+    frame:SetFrameLevel(level)
+    changed = changed or {}
+    changed[#changed + 1] = frame
+    return SetTreeFrameLevelChildren(frame, base, depth, root, changed)
 end
 
 function manager:RefreshLayering()
     if addon.PerfCount then addon.PerfCount("tool layering passes") end
+    -- Re-leveling a frame makes 3.3.5a rebuild its backdrop with an opaque
+    -- white fill, so a layering pass that runs mid-drag paints every window
+    -- the drag re-bands. Defer the whole pass until the drag ends.
+    if self.dragActive then
+        self.pendingLayering = true
+        return
+    end
     local compact = {}
     for _, frame in ipairs(self.layerOrder) do
         if frame and frame.GetName and self.frames[frame:GetName()] == frame then
@@ -76,8 +103,18 @@ function manager:RefreshLayering()
     -- Keep each complete frame hierarchy inside its own level band.  Without
     -- this, 3.3.5 can interleave one window's scrollbar/buttons with another
     -- window's backdrop when both use the DIALOG strata.
+    local changed
     for index, frame in ipairs(compact) do
-        SetTreeFrameLevel(frame, 40 + index * 16, 0)
+        changed = SetTreeFrameLevel(frame, 40 + index * 16, 0, nil, changed)
+    end
+    if changed then
+        for _, frame in ipairs(changed) do
+            if frame.UpdateVisuals then
+                frame:UpdateVisuals()
+            elseif frame.toolWindowSpec or self.frames[frame:GetName()] then
+                self:ApplyVisuals(frame)
+            end
+        end
     end
 end
 
@@ -283,7 +320,8 @@ end
 function manager:ApplyVisuals(frame)
     if not frame then return end
     local colors = addon.colors or addon.activeTheme or {}
-    local background = colors.background or {0.035, 0.035, 0.07, 0.98}
+    local background = colors.windowBackground or colors.background or
+                           {0.035, 0.035, 0.07, 0.98}
     if not (addon.presentation and addon.presentation:IsModern()) then frame:SetBackdrop(backdrop) end
     local frameName = frame.GetName and frame:GetName()
     local opacity = frameName and self:GetAppearanceValue(frameName, "opacity") or 1
@@ -297,8 +335,10 @@ function manager:ApplyVisuals(frame)
                            themeAlpha * backgroundOpacity)
     frame:SetBackdropBorderColor(0.72, 0.72, 0.72, 1)
     if addon.presentation and addon.presentation:IsModern() then
-        addon.presentation:Skin(frame)
-        local shell = addon.presentation:Palette()
+        -- card = true keeps the window shell bordered under see-through
+        -- themes: the transparent Skin pass only strips HUD backdrops.
+        addon.presentation:Skin(frame, true)
+        local shell = colors.windowBackground or addon.presentation:Palette()
         frame:SetBackdropColor(shell[1], shell[2], shell[3], (shell[4] or 1) * backgroundOpacity)
     end
     frame:SetAlpha(opacity or 1)
@@ -381,11 +421,23 @@ function manager:Create(spec)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(self)
         manager:BringToFront(self)
-        if not self.isResizing then self:StartMoving() end
+        if not self.isResizing then
+            self:StartMoving()
+            -- Leveling during a move would repaint other windows white; defer
+            -- it until the drag finishes.
+            manager.dragActive = true
+        end
     end)
     frame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         manager:SavePlacement(self)
+        if manager.dragActive then
+            manager.dragActive = nil
+            if manager.pendingLayering then
+                manager.pendingLayering = nil
+                manager:RefreshLayering()
+            end
+        end
     end)
     if frame.SetMinResize then frame:SetMinResize(spec.minWidth, spec.minHeight) end
     if frame.SetMaxResize then frame:SetMaxResize(spec.maxWidth, spec.maxHeight) end
@@ -414,12 +466,20 @@ function manager:Create(spec)
             if button ~= "LeftButton" then return end
             manager:BringToFront(frame)
             frame.isResizing = true
+            manager.dragActive = true
             if frame.StartSizing then frame:StartSizing("BOTTOMRIGHT") end
         end)
         resize:SetScript("OnMouseUp", function()
             frame:StopMovingOrSizing()
             frame.isResizing = nil
             manager:SavePlacement(frame)
+            if manager.dragActive then
+                manager.dragActive = nil
+                if manager.pendingLayering then
+                    manager.pendingLayering = nil
+                    manager:RefreshLayering()
+                end
+            end
         end)
         frame.resizeButton = resize
     end
@@ -434,7 +494,16 @@ function manager:Create(spec)
     frame:HookScript("OnMouseDown", function(self)
         manager:BringToFront(self)
     end)
-    frame:HookScript("OnHide", function(self) manager:SavePlacement(self) end)
+    frame:HookScript("OnHide", function(self)
+        manager:SavePlacement(self)
+        if manager.dragActive then
+            manager.dragActive = nil
+            if manager.pendingLayering then
+                manager.pendingLayering = nil
+                manager:RefreshLayering()
+            end
+        end
+    end)
     manager.frames[name] = frame
     manager:BringToFront(frame)
     -- Feature tools are persistent working windows.  Keep Escape available

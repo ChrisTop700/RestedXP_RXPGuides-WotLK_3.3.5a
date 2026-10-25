@@ -62,7 +62,7 @@ af:SetScript("OnMouseUp", function(self, button)
 end)
 
 function addon.SetupArrow()
-    af.text:SetFont(addon.font, 9,"OUTLINE")
+    addon.SetFontSafely(af.text, addon.font, 9, "OUTLINE")
     af.texture:SetTexture(addon.GetTexture("rxp_navigation_arrow-1"))
     af.text:SetTextColor(unpack(addon.activeTheme.textColor))
 

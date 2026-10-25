@@ -130,9 +130,16 @@ function view:Palette()
     if p and (p.activeTheme ~= "Default" or (addon.currentGuide and addon.currentGuide.theme)) then
         return theme.background or {0.035, 0.04, 0.075, 1},
             theme.bottomFrameBG or theme.background or {0.1, 0.11, 0.19, 1},
-            theme.textColor or {0.82, 0.84, 0.9}
+            theme.accent or theme.textColor or {0.82, 0.84, 0.9}
     end
     return {0.028, 0.032, 0.065, 0.96}, {0.10, 0.11, 0.19, 0.96}, {0.10, 0.82, 1}
+end
+
+-- Transparent themes keep the fill at zero alpha but dim the 1px outline so it
+-- does not draw a grid over the game world.
+local function IsTransparentTheme()
+    local theme = addon.activeTheme
+    return not not (theme and theme.transparent)
 end
 
 function view:Skin(frame, card)
@@ -142,8 +149,29 @@ function view:Skin(frame, card)
         frame.rxpModernBackdrop = self.backdrop
         frame.rxpModernTheme = addon.activeTheme
     end
-    frame:SetBackdropColor(unpack(card and surface or background))
-    frame:SetBackdropBorderColor(0.30, 0.34, 0.46, 0.85)
+    local theme = addon.activeTheme or {}
+    if IsTransparentTheme() and not (card and theme.cardBackground) then
+        -- HUD panels under a see-through theme get no WHITE8X8 backdrop at
+        -- all, so no code path can leave a white slab over the world.
+        frame:ClearBackdrop()
+        return
+    end
+    if card and theme.cardBackground then
+        -- Controls inside a see-through HUD keep a faint plate so buttons and
+        -- rows still read as controls. HUD panels and guide rows re-apply the
+        -- theme background immediately after skinning, so nothing becomes a
+        -- slab over the world.
+        frame:SetBackdropColor(unpack(theme.cardBackground))
+    else
+        frame:SetBackdropColor(unpack(card and surface or background))
+    end
+    local borderAlpha = addon.GetThemeBorderAlpha and addon.GetThemeBorderAlpha() or 0.85
+    if IsTransparentTheme() then
+        frame:SetBackdropBorderColor(0.55, 0.62, 0.78,
+                                     card and borderAlpha or 0)
+    else
+        frame:SetBackdropBorderColor(0.30, 0.34, 0.46, borderAlpha)
+    end
 end
 
 function view:Button(parent, text, width, callback)
@@ -395,8 +423,18 @@ function view:ApplyHUD()
     self:Skin(root.BottomFrame)
     self:Skin(root.GuideName, true)
     self:Skin(root.Footer, true)
-    root.GuideName.bg:SetTexture(nil)
-    root.Footer.bg:SetTexture(nil)
+    if IsTransparentTheme() then
+        -- The header and footer are part of the HUD, not dialog controls, so
+        -- they stay see-through even though card skinning gives them a plate.
+        root.GuideName:ClearBackdrop()
+        root.Footer:ClearBackdrop()
+        root.GuideName:SetBackdropBorderColor(0, 0, 0, 0)
+        root.Footer:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+    -- 3.3.5a's Texture:SetTexture(nil) leaves the region filled solid white;
+    -- hide the banner regions instead of clearing them.
+    root.GuideName.bg:Hide()
+    root.Footer.bg:Hide()
     root.GuideName.text:SetTextColor(1, 0.82, 0.35)
     if Profile().activeTheme ~= "Default" and addon.activeTheme and addon.activeTheme.textColor then
         root.GuideName.text:SetTextColor(unpack(addon.activeTheme.textColor))

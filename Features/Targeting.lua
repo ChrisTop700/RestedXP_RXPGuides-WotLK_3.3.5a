@@ -1535,9 +1535,8 @@ local function UpdateIconFrameVisuals(self, updateFrame)
     self:SetScale(addon.settings.profile.activeTargetScale or 1)
     addon.targeting:RenderTargetFrameBackground()
     self.title:ClearBackdrop()
-    self.title:SetBackdrop(addon.RXPFrame.backdrop.edge)
-    self.title:SetBackdropColor(unpack(addon.colors.background))
-    self.title.text:SetFont(addon.font, 9, "")
+    addon.SetThemedBackdrop(self.title, addon.RXPFrame.backdrop.edge)
+    addon.SetFontSafely(self.title.text, addon.font, 9, "")
     self.title.text:SetTextColor(unpack(addon.activeTheme.textColor))
     self.title:SetSize(self.title.text:GetStringWidth() + 14, 19)
 end
@@ -1602,8 +1601,7 @@ function addon.targeting:CreateTargetFrame()
     f.title = CreateFrame("Frame", "$parent_title", f, BackdropTemplateMixin and "BackdropTemplate" or nil)
     f.title:SetPoint("TOPLEFT", f, 5, 5)
     f.title:ClearBackdrop()
-    f.title:SetBackdrop(addon.RXPFrame.backdrop.edge)
-    f.title:SetBackdropColor(unpack(addon.colors.background))
+    addon.SetThemedBackdrop(f.title, addon.RXPFrame.backdrop.edge)
 
     f.title.text = f.title:CreateFontString(nil, "OVERLAY")
     f.title.text:ClearAllPoints()
@@ -1611,7 +1609,7 @@ function addon.targeting:CreateTargetFrame()
     f.title.text:SetJustifyH("CENTER")
     f.title.text:SetJustifyV("MIDDLE")
     f.title.text:SetTextColor(unpack(addon.activeTheme.textColor))
-    f.title.text:SetFont(addon.font, 9, "")
+    addon.SetFontSafely(f.title.text, addon.font, 9, "")
     f.title.text:SetText(L "Active Targets")
 
     f.title:SetSize(f.title.text:GetStringWidth() + 14, 19)
@@ -1621,6 +1619,7 @@ function addon.targeting:CreateTargetFrame()
     f.title:SetScript("OnMouseUp", f.onMouseUp)
 
     f.UpdateVisuals = UpdateIconFrameVisuals
+    addon.EnsureVisualsOnShow(f)
     f:SetHeight(40)
     f:SetScale(addon.settings.profile.activeTargetScale)
 
@@ -1667,8 +1666,7 @@ function addon.targeting:RenderTargetFrameBackground()
         f:ClearBackdrop()
     else
         f:ClearBackdrop()
-        f:SetBackdrop(addon.RXPFrame.backdrop.edge)
-        f:SetBackdropColor(unpack(addon.colors.background))
+        addon.SetThemedBackdrop(f, addon.RXPFrame.backdrop.edge)
     end
 end
 

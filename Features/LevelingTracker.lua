@@ -775,7 +775,7 @@ function addon.tracker:CreateGui(attachment, target)
     trackerUi:AddChild(trackerUi.scrollContainer)
 
     trackerUi.frame:SetBackdrop(addon.RXPFrame.backdrop.edge)
-    trackerUi.frame:SetBackdropColor(unpack(addon.colors.background))
+    trackerUi.frame:SetBackdropColor(unpack(addon.GetWindowBackground()))
 
     if attachmentName == 'CharacterFrame' then
         -- Firmly attach to CharacterFrame show/hide
@@ -1394,8 +1394,7 @@ function addon.tracker:RenderSplitsBackground()
         f:ClearBackdrop()
     else
         f:ClearBackdrop()
-        f:SetBackdrop(addon.RXPFrame.backdrop.edge)
-        f:SetBackdropColor(unpack(addon.colors.background))
+        addon.SetThemedBackdrop(f, addon.RXPFrame.backdrop.edge)
     end
 end
 
@@ -1452,8 +1451,7 @@ function addon.tracker:CreateLevelSplits()
     f.title:SetScript("OnMouseUp", f.onMouseUp)
 
     f.title:ClearBackdrop()
-    f.title:SetBackdrop(addon.RXPFrame.backdrop.edge)
-    f.title:SetBackdropColor(unpack(addon.colors.background))
+    addon.SetThemedBackdrop(f.title, addon.RXPFrame.backdrop.edge)
     -- Disable background texture for now, inconsistently loads
     --[[
     f.title.bg = f.title:CreateTexture("$parent_titleBG", "BACKGROUND")
@@ -1501,12 +1499,13 @@ function addon.tracker:CreateLevelSplits()
     f.title.text:SetJustifyH("CENTER")
     f.title.text:SetJustifyV("MIDDLE")
     f.title.text:SetTextColor(unpack(addon.activeTheme.textColor))
-    f.title.text:SetFont(addon.font, 9, "")
+    addon.SetFontSafely(f.title.text, addon.font, 9, "")
     f.title.text:SetText(L("Level splits"))
     f.title.text:SetPoint("CENTER", f.title, -14, 1)
 
     f.history = AceGUI:Create("Label")
     f.history:SetFont(self.fonts.splits, addon.settings.profile.levelSplitsFontSize, "")
+    if addon.ApplyFontShadow then addon.ApplyFontShadow(f.history.label) end
     f.history:SetFullWidth(true)
     f.history.frame:SetParent(f)
     f.history.frame:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -(f.title:GetHeight() / 2 + 2))
@@ -1515,6 +1514,7 @@ function addon.tracker:CreateLevelSplits()
 
     f.current = AceGUI:Create("Label")
     f.current:SetFont(self.fonts.splits, addon.settings.profile.levelSplitsFontSize, "")
+    if addon.ApplyFontShadow then addon.ApplyFontShadow(f.current.label) end
     f.current:SetFullWidth(true)
     f.current.frame:SetParent(f)
     f.current.frame:SetPoint("TOPLEFT", f.history.frame, "BOTTOMLEFT", 0, -8)
@@ -1523,6 +1523,7 @@ function addon.tracker:CreateLevelSplits()
 
     f.total = AceGUI:Create("Label")
     f.total:SetFont(self.fonts.splits, addon.settings.profile.levelSplitsFontSize, "")
+    if addon.ApplyFontShadow then addon.ApplyFontShadow(f.total.label) end
     f.total:SetFullWidth(true)
     f.total.frame:SetParent(f)
     f.total.frame:SetPoint("TOPLEFT", f.current.frame, "BOTTOMLEFT", 0, 0)
@@ -1588,6 +1589,18 @@ function addon.tracker:CreateLevelSplits()
             f:Hide()
         end
     end
+
+    -- RenderFrame walks enabledFrames and repaints anything exposing
+    -- UpdateVisuals; without this the splits window kept its login-time theme
+    -- (or a white backdrop) after a theme change.
+    f.UpdateVisuals = function(this)
+        addon.tracker:RenderSplitsBackground()
+        if this.title then
+            this.title:ClearBackdrop()
+            addon.SetThemedBackdrop(this.title, addon.RXPFrame.backdrop.edge)
+        end
+    end
+    addon.EnsureVisualsOnShow(f)
 
     -- Populate now: OnShow does not fire for a frame that is created already
     -- shown, so without this the splits window is blank at login until the user
@@ -1812,6 +1825,11 @@ function addon.tracker:UpdateLevelSplits(kind)
         f.current:SetFont(self.fonts.splits, addon.settings.profile.levelSplitsFontSize, "")
         f.history:SetFont(self.fonts.splits, addon.settings.profile.levelSplitsFontSize, "")
         f.total:SetFont(self.fonts.splits, addon.settings.profile.levelSplitsFontSize, "")
+        if addon.ApplyFontShadow then
+            addon.ApplyFontShadow(f.current.label)
+            addon.ApplyFontShadow(f.history.label)
+            addon.ApplyFontShadow(f.total.label)
+        end
     end
 
     local width =

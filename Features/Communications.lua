@@ -632,7 +632,7 @@ Arrow data
     f:AddChild(f.scrollContainer)
 
     f.frame:SetBackdrop(addon.RXPFrame.backdrop.edge)
-    f.frame:SetBackdropColor(unpack(addon.colors.background))
+    f.frame:SetBackdropColor(unpack(addon.GetWindowBackground()))
 
     local editbox = AceGUI:Create("MultiLineEditBox")
     editbox:SetLabel(L("Join our support discord at discord.gg/RestedXP and copy paste this form into #bug-report"))
@@ -660,7 +660,7 @@ function addon.comms.OpenBrandedExport(title, description, content, width, heigh
     f:SetTitle("RestedXP: " .. title)
 
     f.frame:SetBackdrop(addon.RXPFrame.backdrop.edge)
-    f.frame:SetBackdropColor(unpack(addon.colors.background))
+    f.frame:SetBackdropColor(unpack(addon.GetWindowBackground()))
 
     local editbox = AceGUI:Create("MultiLineEditBox")
     editbox:SetLabel(description)
